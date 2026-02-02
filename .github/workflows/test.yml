@@ -87,7 +87,7 @@ jobs:
         id: e2e
         continue-on-error: true
         env:
-          # Base config uses AI Gateway with BYOK/Unified Billing (no direct key)
+          # aig-byok uses AI Gateway with BYOK/Unified Billing (no direct key)
           # anthropic-direct uses ANTHROPIC_API_KEY only (no gateway)
           # aig-authenticated uses both (authenticated gateway + direct key)
           AI_GATEWAY_API_KEY: ${{ (matrix.config.env.USE_ANTHROPIC_DIRECT != 'true' || matrix.config.env.USE_AI_GATEWAY == 'true') && secrets.AI_GATEWAY_API_KEY || '' }}
