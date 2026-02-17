@@ -385,7 +385,10 @@ app.all('*', async (c) => {
     // Inject gateway token into WebSocket request if not already present.
     // CF Access redirects strip query params, so authenticated users lose ?token=.
     // Since the user already passed CF Access auth, we inject the token server-side.
-    const gatewayToken = c.get('tenantConfig')?.moltbotGatewayToken || c.env.MOLTBOT_GATEWAY_TOKEN;
+    // In multi-tenant mode, the container runs without a gateway token (Worker handles auth).
+    // In single-tenant mode, inject the token so the container can verify.
+    const isMultiTenantMode = !!c.get('tenantConfig');
+    const gatewayToken = isMultiTenantMode ? null : c.env.MOLTBOT_GATEWAY_TOKEN;
     let wsRequest = request;
     if (gatewayToken && !url.searchParams.has('token')) {
       const tokenUrl = new URL(url.toString());

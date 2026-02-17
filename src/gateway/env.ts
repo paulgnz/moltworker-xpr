@@ -106,8 +106,10 @@ export function buildEnvVarsFromConfig(
     envVars.ANTHROPIC_API_KEY = env.AI_GATEWAY_API_KEY;
   }
 
-  // Gateway token — per-tenant
-  if (config.moltbotGatewayToken) envVars.OPENCLAW_GATEWAY_TOKEN = config.moltbotGatewayToken;
+  // In multi-tenant mode, the Worker handles all auth (wallet JWT).
+  // The container is only reachable via the Sandbox network, so no token needed.
+  // Set dev mode to skip device pairing inside the container.
+  envVars.OPENCLAW_DEV_MODE = 'true';
 
   // R2 persistence — shared infra credentials
   if (env.R2_ACCESS_KEY_ID) envVars.R2_ACCESS_KEY_ID = env.R2_ACCESS_KEY_ID;
