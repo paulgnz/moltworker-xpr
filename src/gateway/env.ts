@@ -106,9 +106,11 @@ export function buildEnvVarsFromConfig(
     envVars.ANTHROPIC_API_KEY = env.AI_GATEWAY_API_KEY;
   }
 
-  // In multi-tenant mode, the Worker handles all auth (wallet JWT).
-  // The container is only reachable via the Sandbox network, so no token needed.
-  // Set dev mode to skip device pairing inside the container.
+  // In multi-tenant mode, the Worker's wallet auth middleware handles authentication.
+  // The container is not internet-accessible, so container-level token auth is unnecessary.
+  // Don't set OPENCLAW_GATEWAY_TOKEN — the gateway starts without --token flag,
+  // and with --allow-unconfigured it accepts unauthenticated WebSocket connections.
+  // OPENCLAW_DEV_MODE enables allowInsecureAuth for the Control UI.
   envVars.OPENCLAW_DEV_MODE = 'true';
 
   // R2 persistence — shared infra credentials

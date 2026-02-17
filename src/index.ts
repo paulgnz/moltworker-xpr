@@ -267,6 +267,7 @@ app.use('*', async (c, next) => {
     url.pathname === '/sandbox-health' ||
     url.pathname === '/api/status' ||
     url.pathname.startsWith('/api/auth/') ||
+    url.pathname === '/api/gateway/restart' ||
     url.pathname === '/logo.png' ||
     url.pathname === '/logo-small.png' ||
     url.pathname.startsWith('/_admin/assets/') ||
@@ -382,18 +383,23 @@ app.all('*', async (c) => {
       console.log('[WS] URL:', url.pathname + redactedSearch);
     }
 
-    // Inject gateway token into WebSocket request if not already present.
-    // CF Access redirects strip query params, so authenticated users lose ?token=.
-    // Since the user already passed CF Access auth, we inject the token server-side.
-    // In multi-tenant mode, the container runs without a gateway token (Worker handles auth).
-    // In single-tenant mode, inject the token so the container can verify.
-    const isMultiTenantMode = !!c.get('tenantConfig');
-    const gatewayToken = isMultiTenantMode ? null : c.env.MOLTBOT_GATEWAY_TOKEN;
+    // In multi-tenant mode, the Worker's wallet auth handles authentication.
+    // The container's gateway runs without token auth (--allow-unconfigured),
+    // so no token injection needed. wsConnect doesn't forward query params anyway.
+    //
+    // In single-tenant mode, inject the gateway token via query param.
+    // CF Access redirects strip query params, so we re-inject server-side.
     let wsRequest = request;
-    if (gatewayToken && !url.searchParams.has('token')) {
-      const tokenUrl = new URL(url.toString());
-      tokenUrl.searchParams.set('token', gatewayToken);
-      wsRequest = new Request(tokenUrl.toString(), request);
+    if (!isMultiTenant(c.env)) {
+      const gatewayToken = c.env.MOLTBOT_GATEWAY_TOKEN;
+      if (gatewayToken && !url.searchParams.has('token')) {
+        const tokenUrl = new URL(url.toString());
+        tokenUrl.searchParams.set('token', gatewayToken);
+        wsRequest = new Request(tokenUrl.toString(), request);
+        console.log('[WS] Token injected (single-tenant mode)');
+      }
+    } else {
+      console.log('[WS] Multi-tenant mode — no container token needed');
     }
 
     // Get WebSocket connection to the container
@@ -491,9 +497,8 @@ app.all('*', async (c) => {
     });
 
     containerWs.addEventListener('close', (event) => {
-      if (debugLogs) {
-        console.log('[WS] Container closed:', event.code, event.reason);
-      }
+      // Always log close reason to help debug token issues
+      console.log('[WS] Container closed:', event.code, event.reason);
       // Transform the close reason (truncate to 123 bytes max for WebSocket spec)
       let reason = transformErrorMessage(event.reason, url.host);
       if (reason.length > 123) {
@@ -502,18 +507,25 @@ app.all('*', async (c) => {
       if (debugLogs) {
         console.log('[WS] Transformed close reason:', reason);
       }
-      serverWs.close(event.code, reason);
+      // Code 1006 is reserved (abnormal closure) and can't be sent in a close frame.
+      // Use 1011 (unexpected condition) as a safe fallback.
+      const safeCode = event.code === 1006 || event.code === 1005 ? 1011 : event.code;
+      try {
+        serverWs.close(safeCode, reason);
+      } catch (closeErr) {
+        console.error('[WS] Failed to close client WebSocket:', closeErr);
+      }
     });
 
     // Handle errors
     serverWs.addEventListener('error', (event) => {
       console.error('[WS] Client error:', event);
-      containerWs.close(1011, 'Client error');
+      try { containerWs.close(1011, 'Client error'); } catch { /* already closed */ }
     });
 
     containerWs.addEventListener('error', (event) => {
       console.error('[WS] Container error:', event);
-      serverWs.close(1011, 'Container error');
+      try { serverWs.close(1011, 'Container error'); } catch { /* already closed */ }
     });
 
     if (debugLogs) {

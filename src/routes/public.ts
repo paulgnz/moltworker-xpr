@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import type { AppEnv } from '../types';
 import { MOLTBOT_PORT } from '../config';
-import { findExistingMoltbotProcess } from '../gateway';
+import { findExistingMoltbotProcess, ensureMoltbotGateway } from '../gateway';
 import { verifyWalletProof, signWalletJWT, verifyWalletJWT } from '../auth';
 import type { WalletProof } from '../auth';
 
@@ -56,6 +56,38 @@ publicRoutes.get('/api/status', async (c) => {
       status: 'error',
       error: err instanceof Error ? err.message : 'Unknown error',
     });
+  }
+});
+
+// POST /api/gateway/restart - Kill the gateway process so it restarts with fresh env vars
+// Protected by MOLTBOT_GATEWAY_TOKEN query param (not full auth — for operational use)
+publicRoutes.post('/api/gateway/restart', async (c) => {
+  const token = new URL(c.req.url).searchParams.get('token');
+  const expected = c.get('tenantConfig')?.moltbotGatewayToken || c.env.MOLTBOT_GATEWAY_TOKEN;
+  if (!token || token !== expected) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+
+  const sandbox = c.get('sandbox');
+  try {
+    const existing = await findExistingMoltbotProcess(sandbox);
+    if (existing) {
+      console.log('[restart] Killing gateway process:', existing.id);
+      await existing.kill();
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+
+    // Start new gateway in background
+    const tc = c.get('tenantConfig');
+    c.executionCtx.waitUntil(
+      ensureMoltbotGateway(sandbox, c.env, tc).catch((err: Error) => {
+        console.error('[restart] Gateway restart failed:', err);
+      }),
+    );
+
+    return c.json({ success: true, message: existing ? 'Gateway killed, restarting...' : 'No gateway running, starting...' });
+  } catch (err) {
+    return c.json({ error: err instanceof Error ? err.message : 'Unknown error' }, 500);
   }
 });
 
