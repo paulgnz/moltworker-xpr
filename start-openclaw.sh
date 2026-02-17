@@ -260,6 +260,21 @@ if (process.env.SLACK_BOT_TOKEN && process.env.SLACK_APP_TOKEN) {
     };
 }
 
+// XPR Agents plugin configuration
+// The @xpr-agents/openclaw plugin reads config from the plugin config section
+if (process.env.XPR_ACCOUNT) {
+    config.plugins = config.plugins || {};
+    config.plugins['@xpr-agents/openclaw'] = {
+        xprAccount: process.env.XPR_ACCOUNT,
+        xprPrivateKey: process.env.XPR_PRIVATE_KEY || '',
+        xprNetwork: process.env.XPR_NETWORK || 'mainnet',
+        xprRpcEndpoint: process.env.XPR_RPC_ENDPOINT || '',
+        indexerUrl: process.env.XPR_INDEXER_URL || '',
+        hookToken: process.env.OPENCLAW_HOOK_TOKEN || '',
+    };
+    console.log('XPR Agents plugin configured for account: ' + process.env.XPR_ACCOUNT);
+}
+
 fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
 console.log('Configuration patched successfully');
 EOFPATCH

@@ -25,6 +25,10 @@ RUN npm install -g pnpm
 RUN npm install -g openclaw@2026.2.3 \
     && openclaw --version
 
+# Install XPR Agents OpenClaw plugin (184+ on-chain tools)
+RUN openclaw plugins install @xpr-agents/openclaw \
+    && echo "XPR Agents plugin installed"
+
 # Create OpenClaw directories
 # Legacy .clawdbot paths are kept for R2 backup migration
 RUN mkdir -p /root/.openclaw \
@@ -32,11 +36,11 @@ RUN mkdir -p /root/.openclaw \
     && mkdir -p /root/clawd/skills
 
 # Copy startup script
-# Build cache bust: 2026-02-11-v30-rclone
+# Build cache bust: 2026-02-17-v31-xpr-agents
 COPY start-openclaw.sh /usr/local/bin/start-openclaw.sh
 RUN chmod +x /usr/local/bin/start-openclaw.sh
 
-# Copy custom skills
+# Copy custom skills (includes XPR agent built-in skills)
 COPY skills/ /root/clawd/skills/
 
 # Set working directory

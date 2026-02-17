@@ -42,6 +42,13 @@ export interface MoltbotEnv {
   BROWSER?: Fetcher;
   CDP_SECRET?: string; // Shared secret for CDP endpoint authentication
   WORKER_URL?: string; // Public URL of the worker (for CDP endpoint)
+  // XPR Network agent configuration
+  XPR_ACCOUNT?: string; // Agent's on-chain account name
+  XPR_PRIVATE_KEY?: string; // Agent's private key for signing transactions
+  XPR_NETWORK?: string; // 'mainnet' or 'testnet'
+  XPR_RPC_ENDPOINT?: string; // RPC endpoint URL
+  XPR_INDEXER_URL?: string; // Indexer API URL
+  OPENCLAW_HOOK_TOKEN?: string; // Webhook auth token for indexer → agent communication
 }
 
 /**

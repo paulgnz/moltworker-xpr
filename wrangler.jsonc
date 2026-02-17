@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "moltbot-sandbox",
+  "name": "xpr-agent-sandbox",
   "main": "src/index.ts",
   "compatibility_date": "2025-05-06",
   "compatibility_flags": ["nodejs_compat"],
@@ -97,4 +97,12 @@
   // - R2_ACCESS_KEY_ID: R2 access key ID (from R2 API tokens)
   // - R2_SECRET_ACCESS_KEY: R2 secret access key (from R2 API tokens)
   // - CF_ACCOUNT_ID: Your Cloudflare account ID (for R2 endpoint URL)
+  //
+  // XPR Network agent (set by deploy service during provisioning):
+  // - XPR_ACCOUNT: Agent's on-chain account name
+  // - XPR_PRIVATE_KEY: Agent's private key for signing transactions
+  // - XPR_NETWORK: 'mainnet' or 'testnet'
+  // - XPR_RPC_ENDPOINT: RPC endpoint URL
+  // - XPR_INDEXER_URL: Indexer API URL
+  // - OPENCLAW_HOOK_TOKEN: Webhook auth token
 }

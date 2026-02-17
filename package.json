@@ -1,9 +1,9 @@
 {
-  "name": "moltbot-sandbox",
+  "name": "xpr-agent-sandbox",
   "version": "1.0.0",
   "type": "module",
   "private": true,
-  "description": "Run Moltbot personal AI assistant in a Cloudflare Sandbox",
+  "description": "Run XPR Network AI agents in Cloudflare Sandbox with OpenClaw + 184 on-chain tools",
   "scripts": {
     "build": "vite build",
     "deploy": "npm run build && wrangler deploy",

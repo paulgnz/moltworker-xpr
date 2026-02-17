@@ -40,3 +40,11 @@ MOLTBOT_GATEWAY_TOKEN=dev-token-change-in-prod
 # CDP (Chrome DevTools Protocol) configuration for browser automation
 # CDP_SECRET=shared-secret-for-cdp-auth
 # WORKER_URL=https://your-worker.example.com
+
+# XPR Network agent configuration (set by deploy service)
+# XPR_ACCOUNT=myagent12345
+# XPR_PRIVATE_KEY=PVT_K1_...
+# XPR_NETWORK=mainnet
+# XPR_RPC_ENDPOINT=https://rpc.api.mainnet.metalx.com
+# XPR_INDEXER_URL=https://indexer.xpragents.com
+# OPENCLAW_HOOK_TOKEN=your-hook-token

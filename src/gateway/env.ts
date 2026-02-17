@@ -55,5 +55,13 @@ export function buildEnvVars(env: MoltbotEnv): Record<string, string> {
   if (env.R2_SECRET_ACCESS_KEY) envVars.R2_SECRET_ACCESS_KEY = env.R2_SECRET_ACCESS_KEY;
   if (env.R2_BUCKET_NAME) envVars.R2_BUCKET_NAME = env.R2_BUCKET_NAME;
 
+  // XPR Network agent configuration
+  if (env.XPR_ACCOUNT) envVars.XPR_ACCOUNT = env.XPR_ACCOUNT;
+  if (env.XPR_PRIVATE_KEY) envVars.XPR_PRIVATE_KEY = env.XPR_PRIVATE_KEY;
+  if (env.XPR_NETWORK) envVars.XPR_NETWORK = env.XPR_NETWORK;
+  if (env.XPR_RPC_ENDPOINT) envVars.XPR_RPC_ENDPOINT = env.XPR_RPC_ENDPOINT;
+  if (env.XPR_INDEXER_URL) envVars.XPR_INDEXER_URL = env.XPR_INDEXER_URL;
+  if (env.OPENCLAW_HOOK_TOKEN) envVars.OPENCLAW_HOOK_TOKEN = env.OPENCLAW_HOOK_TOKEN;
+
   return envVars;
 }
