@@ -131,7 +131,7 @@ function serveWalletLoginPage(c: Context<AppEnv>) {
   const rpcEndpoint =
     c.env.XPR_RPC_ENDPOINT ||
     (network === 'testnet' ? 'https://testnet.protonchain.com' : 'https://proton.eosusa.io');
-  const rpcEndpoints = JSON.stringify([rpcEndpoint]);
+  const rpcEndpoints = JSON.stringify([rpcEndpoint]).replace(/"/g, '&quot;');
   const requesterAccount = c.env.XPR_ACCOUNT || 'agentcore';
 
   const html = walletLoginHtml
