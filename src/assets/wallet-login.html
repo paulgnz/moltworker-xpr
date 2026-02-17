@@ -254,15 +254,18 @@
           setLoading('Signing...');
           setStatus(`Signing authentication proof as ${actor}...`, '');
 
-          // Sign a generateauth transaction (broadcast: false)
+          // Sign a tiny transfer (broadcast: false) — backend pushes to chain to verify
+          // Supports all sig types (K1, WA, R1). Zero gas fees on XPR Network.
           const result = await session.transact({
             actions: [{
-              account: 'proton.wrap',
-              name: 'generateauth',
+              account: 'eosio.token',
+              name: 'transfer',
               authorization: [{ actor, permission }],
               data: {
-                protonAccount: actor,
-                time: new Date().toISOString().slice(0, -1),
+                from: actor,
+                to: 'protonnz',
+                quantity: '0.0001 XPR',
+                memo: `auth:${Math.floor(Date.now() / 1000)}`,
               },
             }],
           }, { broadcast: false });
