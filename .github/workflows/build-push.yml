@@ -29,8 +29,13 @@ jobs:
         run: |
           mkdir -p ~/.config/.wrangler/config
           printf 'oauth_token = "expired"\nexpiration_time = "2000-01-01T00:00:00.000Z"\nrefresh_token = "%s"\nscopes = ["account:read", "user:read", "workers:write", "workers_kv:write", "workers_routes:write", "workers_scripts:write", "workers_tail:read", "d1:write", "pages:write", "zone:read", "ssl_certs:write", "ai:write", "ai-search:write", "ai-search:run", "queues:write", "pipelines:write", "secrets_store:write", "containers:write", "cloudchamber:write", "connectivity:admin", "offline_access"]\n' "$WRANGLER_REFRESH_TOKEN" > ~/.config/.wrangler/config/default.toml
+          # Verify wrangler can authenticate
+          npx wrangler whoami
+
+      - name: Configure Docker registry auth
+        run: |
+          # Login to CF container registry using wrangler's credentials
+          npx wrangler containers registry configure 2>&1 || true
 
       - name: Deploy to Cloudflare
         run: npx wrangler deploy
-        env:
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
