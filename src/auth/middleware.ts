@@ -34,7 +34,9 @@ export function isE2ETestMode(env: MoltbotEnv): boolean {
  * 3. Authorization: Bearer header (wallet auth)
  * 4. moltbot_session cookie (wallet auth)
  */
-export function extractJWT(c: Context<AppEnv>): { token: string; source: 'cf-access' | 'wallet' } | null {
+export function extractJWT(
+  c: Context<AppEnv>,
+): { token: string; source: 'cf-access' | 'wallet' } | null {
   // CF Access sources
   const cfHeader = c.req.header('CF-Access-JWT-Assertion');
   if (cfHeader) return { token: cfHeader, source: 'cf-access' };
@@ -119,7 +121,9 @@ export function createAuthMiddleware(options: AuthMiddlewareOptions) {
           return next();
         }
         // Valid JWT but wrong account
-        console.warn(`[auth] Wallet JWT for ${walletPayload.actor} denied — expected ${c.env.XPR_OWNER_ACCOUNT}`);
+        console.warn(
+          `[auth] Wallet JWT for ${walletPayload.actor} denied — expected ${c.env.XPR_OWNER_ACCOUNT}`,
+        );
       }
     }
 

@@ -127,7 +127,8 @@ function serveWalletLoginPage(c: Context<AppEnv>) {
       ? '71ee83bcf52142d61019d95f9cc5427ba6a0d7ff8ba65d929b8a6a4461ceab80'
       : '384da888112027f0321850a169f737c33e53b388aad48b5adace4bab97f437e0';
 
-  const rpcEndpoint = c.env.XPR_RPC_ENDPOINT ||
+  const rpcEndpoint =
+    c.env.XPR_RPC_ENDPOINT ||
     (network === 'testnet' ? 'https://testnet.protonchain.com' : 'https://proton.eosusa.io');
   const rpcEndpoints = JSON.stringify([rpcEndpoint]);
   const requesterAccount = c.env.XPR_ACCOUNT || 'agentcore';
@@ -236,7 +237,7 @@ app.use('*', async (c, next) => {
   // Intercept wallet login redirect signal — serve the login page instead
   if (response && response.status === 401) {
     try {
-      const body = await response.clone().json() as Record<string, unknown>;
+      const body = (await response.clone().json()) as Record<string, unknown>;
       if (body?._walletLoginRequired) {
         return serveWalletLoginPage(c);
       }

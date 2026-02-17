@@ -61,9 +61,7 @@ function getAuthRpcEndpoint(env: MoltbotEnv): string {
   if (env.XPR_RPC_ENDPOINT) return env.XPR_RPC_ENDPOINT;
 
   const network = env.XPR_NETWORK || 'mainnet';
-  return network === 'testnet'
-    ? 'https://testnet.protonchain.com'
-    : 'https://proton.eosusa.io';
+  return network === 'testnet' ? 'https://testnet.protonchain.com' : 'https://proton.eosusa.io';
 }
 
 /**
@@ -111,7 +109,8 @@ export async function verifyWalletProof(
     let errorMsg: string;
     try {
       const parsed = JSON.parse(body);
-      errorMsg = parsed?.error?.details?.[0]?.message || parsed?.error?.what || parsed?.message || body;
+      errorMsg =
+        parsed?.error?.details?.[0]?.message || parsed?.error?.what || parsed?.message || body;
     } catch {
       errorMsg = body;
     }
@@ -183,7 +182,10 @@ export async function verifyWalletJWT(
       iat: payload.iat || 0,
     };
   } catch (err) {
-    console.error('[wallet-auth] JWT verification failed:', err instanceof Error ? err.message : err);
+    console.error(
+      '[wallet-auth] JWT verification failed:',
+      err instanceof Error ? err.message : err,
+    );
     return null;
   }
 }

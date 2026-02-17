@@ -56,7 +56,11 @@ describe('isE2ETestMode', () => {
 
 describe('extractJWT', () => {
   // Helper to create a mock context
-  function createMockContext(options: { jwtHeader?: string; cookies?: string; authHeader?: string }): Context<AppEnv> {
+  function createMockContext(options: {
+    jwtHeader?: string;
+    cookies?: string;
+    authHeader?: string;
+  }): Context<AppEnv> {
     const headers = new Headers();
     if (options.jwtHeader) {
       headers.set('CF-Access-JWT-Assertion', options.jwtHeader);
@@ -237,7 +241,10 @@ describe('createAuthMiddleware', () => {
     await middleware(c, next);
 
     expect(next).not.toHaveBeenCalled();
-    expect(htmlMock).toHaveBeenCalledWith(expect.stringContaining('Authentication Not Configured'), 503);
+    expect(htmlMock).toHaveBeenCalledWith(
+      expect.stringContaining('Authentication Not Configured'),
+      503,
+    );
   });
 
   it('returns 401 JSON error when JWT is missing (CF Access)', async () => {

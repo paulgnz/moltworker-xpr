@@ -92,9 +92,14 @@ publicRoutes.post('/api/auth/authorize', async (c) => {
 
   // Check that the signer matches the configured owner account
   if (proof.signer.actor !== c.env.XPR_OWNER_ACCOUNT) {
-    console.warn(`[wallet-auth] Rejected auth from ${proof.signer.actor} — expected ${c.env.XPR_OWNER_ACCOUNT}`);
+    console.warn(
+      `[wallet-auth] Rejected auth from ${proof.signer.actor} — expected ${c.env.XPR_OWNER_ACCOUNT}`,
+    );
     return c.json(
-      { success: false, error: `Unauthorized account. Only ${c.env.XPR_OWNER_ACCOUNT} can access this gateway.` },
+      {
+        success: false,
+        error: `Unauthorized account. Only ${c.env.XPR_OWNER_ACCOUNT} can access this gateway.`,
+      },
       403,
     );
   }
