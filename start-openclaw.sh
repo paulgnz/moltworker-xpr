@@ -9,6 +9,9 @@
 
 set -e
 
+# Normalize secret names: deploy service uses MOLTBOT_* prefix, OpenClaw uses OPENCLAW_*
+export OPENCLAW_GATEWAY_TOKEN="${OPENCLAW_GATEWAY_TOKEN:-$MOLTBOT_GATEWAY_TOKEN}"
+
 if pgrep -f "openclaw gateway" > /dev/null 2>&1; then
     echo "OpenClaw gateway is already running, exiting."
     exit 0
@@ -261,12 +264,18 @@ if (process.env.SLACK_BOT_TOKEN && process.env.SLACK_APP_TOKEN) {
 }
 
 // XPR Agents plugin configuration
-// The @xpr-agents/openclaw plugin reads config from env vars directly
-// (XPR_ACCOUNT, XPR_PRIVATE_KEY, XPR_NETWORK, etc.) passed via buildEnvVars().
-// Do NOT write plugin config to the main config file — OpenClaw's strict
-// config validation rejects unknown keys under "plugins".
+// The @xpr-agents/openclaw plugin reads config from the plugin config section
 if (process.env.XPR_ACCOUNT) {
-    console.log('XPR Agents plugin configured for account: ' + process.env.XPR_ACCOUNT + ' (via env vars)');
+    config.plugins = config.plugins || {};
+    config.plugins['@xpr-agents/openclaw'] = {
+        xprAccount: process.env.XPR_ACCOUNT,
+        xprPrivateKey: process.env.XPR_PRIVATE_KEY || '',
+        xprNetwork: process.env.XPR_NETWORK || 'mainnet',
+        xprRpcEndpoint: process.env.XPR_RPC_ENDPOINT || '',
+        indexerUrl: process.env.XPR_INDEXER_URL || '',
+        hookToken: process.env.OPENCLAW_HOOK_TOKEN || '',
+    };
+    console.log('XPR Agents plugin configured for account: ' + process.env.XPR_ACCOUNT);
 }
 
 fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
@@ -326,9 +335,6 @@ echo "Gateway will be available on port 18789"
 
 rm -f /tmp/openclaw-gateway.lock 2>/dev/null || true
 rm -f "$CONFIG_DIR/gateway.lock" 2>/dev/null || true
-
-# Fix any config validation issues (unknown keys from older deploys, etc.)
-openclaw doctor --fix 2>/dev/null || true
 
 echo "Dev mode: ${OPENCLAW_DEV_MODE:-false}"
 
