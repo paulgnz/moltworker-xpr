@@ -205,23 +205,11 @@
         `;
       }
 
-      // Build RPC endpoint objects for ProtonWebSDK
+      // Build RPC endpoint list for ProtonWebSDK (plain URL strings)
       function buildEndpoints() {
-        if (rpcEndpoints.length > 0) {
-          return rpcEndpoints.map((ep) => {
-            const url = new URL(ep);
-            return {
-              protocol: url.protocol.replace(':', ''),
-              host: url.hostname,
-              port: parseInt(url.port) || (url.protocol === 'https:' ? 443 : 80),
-            };
-          });
-        }
-        // Defaults
-        if (apiMode === 'testnet') {
-          return [{ protocol: 'https', host: 'testnet.protonchain.com', port: 443 }];
-        }
-        return [{ protocol: 'https', host: 'proton.eosusa.io', port: 443 }];
+        if (rpcEndpoints.length > 0) return rpcEndpoints;
+        if (apiMode === 'testnet') return ['https://testnet.protonchain.com'];
+        return ['https://proton.eosusa.io'];
       }
 
       // Expose to global scope for onclick
