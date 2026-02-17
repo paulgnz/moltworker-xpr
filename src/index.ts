@@ -30,6 +30,7 @@ import { createAuthMiddleware } from './auth';
 import { ensureMoltbotGateway, findExistingMoltbotProcess } from './gateway';
 import { publicRoutes, api, adminUi, debug, cdp } from './routes';
 import { redactSensitiveParams } from './utils/logging';
+import { isMultiTenant, resolveAgentFromHostname, getTenantConfig } from './tenant';
 import loadingPageHtml from './assets/loading.html';
 import configErrorHtml from './assets/config-error.html';
 import walletLoginHtml from './assets/wallet-login.html';
@@ -105,8 +106,8 @@ function validateRequiredEnv(env: MoltbotEnv): string[] {
  *   npx wrangler secret put SANDBOX_SLEEP_AFTER
  *   # Enter: 10m (or 1h, 30m, etc.)
  */
-function buildSandboxOptions(env: MoltbotEnv): SandboxOptions {
-  const sleepAfter = env.SANDBOX_SLEEP_AFTER?.toLowerCase() || 'never';
+function buildSandboxOptions(env: MoltbotEnv, tenantConfig?: import('./tenant').TenantConfig): SandboxOptions {
+  const sleepAfter = (tenantConfig?.sandboxSleepAfter || env.SANDBOX_SLEEP_AFTER || 'never').toLowerCase();
 
   // 'never' means keep the container alive indefinitely
   if (sleepAfter === 'never') {
@@ -160,11 +161,33 @@ app.use('*', async (c, next) => {
   await next();
 });
 
-// Middleware: Initialize sandbox for all requests
+// Middleware: Resolve tenant and initialize sandbox
 app.use('*', async (c, next) => {
-  const options = buildSandboxOptions(c.env);
-  const sandbox = getSandbox(c.env.Sandbox, 'moltbot', options);
-  c.set('sandbox', sandbox);
+  if (isMultiTenant(c.env)) {
+    // Multi-tenant mode: sandbox ID from hostname subdomain
+    const agentName = resolveAgentFromHostname(c.req.header('host') || '');
+    if (!agentName) {
+      return c.json({ error: 'Could not resolve agent from hostname' }, 400);
+    }
+
+    const config = await getTenantConfig(c.env.AGENT_KV!, agentName);
+    if (!config) {
+      return c.json({ error: `Agent '${agentName}' not found` }, 404);
+    }
+
+    c.set('agentName', agentName);
+    c.set('tenantConfig', config);
+
+    const options = buildSandboxOptions(c.env, config);
+    const sandbox = getSandbox(c.env.Sandbox, agentName, options);
+    c.set('sandbox', sandbox);
+  } else {
+    // Single-tenant mode: fixed sandbox ID (unchanged behavior)
+    const options = buildSandboxOptions(c.env);
+    const sandbox = getSandbox(c.env.Sandbox, 'moltbot', options);
+    c.set('sandbox', sandbox);
+  }
+
   await next();
 });
 
@@ -192,8 +215,8 @@ app.use('*', async (c, next) => {
     return next();
   }
 
-  // Skip validation in dev mode
-  if (c.env.DEV_MODE === 'true') {
+  // Skip validation in dev mode or multi-tenant mode (config comes from KV)
+  if (c.env.DEV_MODE === 'true' || isMultiTenant(c.env)) {
     return next();
   }
 
@@ -224,7 +247,12 @@ app.use('*', async (c, next) => {
 });
 
 // Middleware: Authentication for protected routes (wallet auth or CF Access)
+// In multi-tenant mode, skip — each tenant has its own gateway token for wallet auth
 app.use('*', async (c, next) => {
+  if (isMultiTenant(c.env)) {
+    return next();
+  }
+
   const acceptsHtml = c.req.header('Accept')?.includes('text/html');
   const middleware = createAuthMiddleware({
     type: acceptsHtml ? 'html' : 'json',
@@ -287,8 +315,9 @@ app.all('*', async (c) => {
     console.log('[PROXY] Gateway not ready, serving loading page');
 
     // Start the gateway in the background (don't await)
+    const tc = c.get('tenantConfig');
     c.executionCtx.waitUntil(
-      ensureMoltbotGateway(sandbox, c.env).catch((err: Error) => {
+      ensureMoltbotGateway(sandbox, c.env, tc).catch((err: Error) => {
         console.error('[PROXY] Background gateway start failed:', err);
       }),
     );
@@ -299,7 +328,7 @@ app.all('*', async (c) => {
 
   // Ensure moltbot is running (this will wait for startup)
   try {
-    await ensureMoltbotGateway(sandbox, c.env);
+    await ensureMoltbotGateway(sandbox, c.env, c.get('tenantConfig'));
   } catch (error) {
     console.error('[PROXY] Failed to start Moltbot:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -334,10 +363,11 @@ app.all('*', async (c) => {
     // Inject gateway token into WebSocket request if not already present.
     // CF Access redirects strip query params, so authenticated users lose ?token=.
     // Since the user already passed CF Access auth, we inject the token server-side.
+    const gatewayToken = c.get('tenantConfig')?.moltbotGatewayToken || c.env.MOLTBOT_GATEWAY_TOKEN;
     let wsRequest = request;
-    if (c.env.MOLTBOT_GATEWAY_TOKEN && !url.searchParams.has('token')) {
+    if (gatewayToken && !url.searchParams.has('token')) {
       const tokenUrl = new URL(url.toString());
-      tokenUrl.searchParams.set('token', c.env.MOLTBOT_GATEWAY_TOKEN);
+      tokenUrl.searchParams.set('token', gatewayToken);
       wsRequest = new Request(tokenUrl.toString(), request);
     }
 

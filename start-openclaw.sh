@@ -38,6 +38,10 @@ r2_configured() {
 
 R2_BUCKET="${R2_BUCKET_NAME:-moltbot-data}"
 
+# Multi-tenant: TENANT_ID scopes all R2 paths to this agent's prefix
+# Single-tenant: TENANT_ID is empty, no prefix added
+R2_PREFIX="${TENANT_ID:+$TENANT_ID/}"
+
 setup_rclone() {
     mkdir -p "$(dirname "$RCLONE_CONF")"
     cat > "$RCLONE_CONF" << EOF
@@ -65,13 +69,13 @@ if r2_configured; then
 
     echo "Checking R2 for existing backup..."
     # Check if R2 has an openclaw config backup
-    if rclone ls "r2:${R2_BUCKET}/openclaw/openclaw.json" $RCLONE_FLAGS 2>/dev/null | grep -q openclaw.json; then
+    if rclone ls "r2:${R2_BUCKET}/${R2_PREFIX}openclaw/openclaw.json" $RCLONE_FLAGS 2>/dev/null | grep -q openclaw.json; then
         echo "Restoring config from R2..."
-        rclone copy "r2:${R2_BUCKET}/openclaw/" "$CONFIG_DIR/" $RCLONE_FLAGS -v 2>&1 || echo "WARNING: config restore failed with exit code $?"
+        rclone copy "r2:${R2_BUCKET}/${R2_PREFIX}openclaw/" "$CONFIG_DIR/" $RCLONE_FLAGS -v 2>&1 || echo "WARNING: config restore failed with exit code $?"
         echo "Config restored"
-    elif rclone ls "r2:${R2_BUCKET}/clawdbot/clawdbot.json" $RCLONE_FLAGS 2>/dev/null | grep -q clawdbot.json; then
+    elif rclone ls "r2:${R2_BUCKET}/${R2_PREFIX}clawdbot/clawdbot.json" $RCLONE_FLAGS 2>/dev/null | grep -q clawdbot.json; then
         echo "Restoring from legacy R2 backup..."
-        rclone copy "r2:${R2_BUCKET}/clawdbot/" "$CONFIG_DIR/" $RCLONE_FLAGS -v 2>&1 || echo "WARNING: legacy config restore failed with exit code $?"
+        rclone copy "r2:${R2_BUCKET}/${R2_PREFIX}clawdbot/" "$CONFIG_DIR/" $RCLONE_FLAGS -v 2>&1 || echo "WARNING: legacy config restore failed with exit code $?"
         if [ -f "$CONFIG_DIR/clawdbot.json" ] && [ ! -f "$CONFIG_FILE" ]; then
             mv "$CONFIG_DIR/clawdbot.json" "$CONFIG_FILE"
         fi
@@ -81,20 +85,20 @@ if r2_configured; then
     fi
 
     # Restore workspace
-    REMOTE_WS_COUNT=$(rclone ls "r2:${R2_BUCKET}/workspace/" $RCLONE_FLAGS 2>/dev/null | wc -l)
+    REMOTE_WS_COUNT=$(rclone ls "r2:${R2_BUCKET}/${R2_PREFIX}workspace/" $RCLONE_FLAGS 2>/dev/null | wc -l)
     if [ "$REMOTE_WS_COUNT" -gt 0 ]; then
         echo "Restoring workspace from R2 ($REMOTE_WS_COUNT files)..."
         mkdir -p "$WORKSPACE_DIR"
-        rclone copy "r2:${R2_BUCKET}/workspace/" "$WORKSPACE_DIR/" $RCLONE_FLAGS -v 2>&1 || echo "WARNING: workspace restore failed with exit code $?"
+        rclone copy "r2:${R2_BUCKET}/${R2_PREFIX}workspace/" "$WORKSPACE_DIR/" $RCLONE_FLAGS -v 2>&1 || echo "WARNING: workspace restore failed with exit code $?"
         echo "Workspace restored"
     fi
 
     # Restore skills
-    REMOTE_SK_COUNT=$(rclone ls "r2:${R2_BUCKET}/skills/" $RCLONE_FLAGS 2>/dev/null | wc -l)
+    REMOTE_SK_COUNT=$(rclone ls "r2:${R2_BUCKET}/${R2_PREFIX}skills/" $RCLONE_FLAGS 2>/dev/null | wc -l)
     if [ "$REMOTE_SK_COUNT" -gt 0 ]; then
         echo "Restoring skills from R2 ($REMOTE_SK_COUNT files)..."
         mkdir -p "$SKILLS_DIR"
-        rclone copy "r2:${R2_BUCKET}/skills/" "$SKILLS_DIR/" $RCLONE_FLAGS -v 2>&1 || echo "WARNING: skills restore failed with exit code $?"
+        rclone copy "r2:${R2_BUCKET}/${R2_PREFIX}skills/" "$SKILLS_DIR/" $RCLONE_FLAGS -v 2>&1 || echo "WARNING: skills restore failed with exit code $?"
         echo "Skills restored"
     fi
 else
@@ -308,14 +312,14 @@ if r2_configured; then
 
             if [ "$COUNT" -gt 0 ]; then
                 echo "[sync] Uploading changes ($COUNT files) at $(date)" >> "$LOGFILE"
-                rclone sync "$CONFIG_DIR/" "r2:${R2_BUCKET}/openclaw/" \
+                rclone sync "$CONFIG_DIR/" "r2:${R2_BUCKET}/${R2_PREFIX}openclaw/" \
                     $RCLONE_FLAGS --exclude='*.lock' --exclude='*.log' --exclude='*.tmp' --exclude='.git/**' 2>> "$LOGFILE"
                 if [ -d "$WORKSPACE_DIR" ]; then
-                    rclone sync "$WORKSPACE_DIR/" "r2:${R2_BUCKET}/workspace/" \
+                    rclone sync "$WORKSPACE_DIR/" "r2:${R2_BUCKET}/${R2_PREFIX}workspace/" \
                         $RCLONE_FLAGS --exclude='skills/**' --exclude='.git/**' --exclude='node_modules/**' 2>> "$LOGFILE"
                 fi
                 if [ -d "$SKILLS_DIR" ]; then
-                    rclone sync "$SKILLS_DIR/" "r2:${R2_BUCKET}/skills/" \
+                    rclone sync "$SKILLS_DIR/" "r2:${R2_BUCKET}/${R2_PREFIX}skills/" \
                         $RCLONE_FLAGS 2>> "$LOGFILE"
                 fi
                 date -Iseconds > "$LAST_SYNC_FILE"

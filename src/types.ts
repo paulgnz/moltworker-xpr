@@ -1,4 +1,5 @@
 import type { Sandbox } from '@cloudflare/sandbox';
+import type { TenantConfig } from './tenant';
 
 /**
  * Environment bindings for the Moltbot Worker
@@ -7,6 +8,7 @@ export interface MoltbotEnv {
   Sandbox: DurableObjectNamespace<Sandbox>;
   ASSETS: Fetcher; // Assets binding for admin UI static files
   MOLTBOT_BUCKET: R2Bucket; // R2 bucket for persistent storage
+  AGENT_KV?: KVNamespace; // KV namespace for multi-tenant agent configs (multi-tenant mode)
   // Cloudflare AI Gateway configuration (preferred)
   CF_AI_GATEWAY_ACCOUNT_ID?: string; // Cloudflare account ID for AI Gateway
   CF_AI_GATEWAY_GATEWAY_ID?: string; // AI Gateway ID
@@ -70,6 +72,8 @@ export type AppEnv = {
   Variables: {
     sandbox: Sandbox;
     accessUser?: AuthUser;
+    tenantConfig?: TenantConfig;
+    agentName?: string;
   };
 };
 

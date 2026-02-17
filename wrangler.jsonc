@@ -4,6 +4,11 @@
   "main": "src/index.ts",
   "compatibility_date": "2025-05-06",
   "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  // Route wildcard for multi-tenant agent subdomains
+  "routes": [
+    { "pattern": "*.xpragents.com/*", "zone_name": "xpragents.com" }
+  ],
   "observability": {
     "enabled": true,
   },
@@ -36,9 +41,9 @@
   "containers": [
     {
       "class_name": "Sandbox",
-      "image": "./Dockerfile",
+      "image": "registry.cloudflare.com/cc8386622ef323a160a2b0462613111d/xpr-agent-sandbox-sandbox:b51e1857",
       "instance_type": "standard-1",
-      "max_instances": 1,
+      "max_instances": 5,
     },
   ],
   "durable_objects": {
@@ -62,6 +67,9 @@
       "bucket_name": "moltbot-data",
     },
   ],
+
+  // KV namespace for multi-tenant agent configs (enables multi-tenant mode)
+  "kv_namespaces": [{ "binding": "AGENT_KV", "id": "900a672e08c1402ebb1b2e8e7889dbef" }],
 
   // Browser Rendering binding for CDP shim
   "browser": {

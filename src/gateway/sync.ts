@@ -13,8 +13,12 @@ export interface SyncResult {
 const RCLONE_FLAGS = '--transfers=16 --fast-list --s3-no-check-bucket';
 const LAST_SYNC_FILE = '/tmp/.last-sync';
 
-function rcloneRemote(env: MoltbotEnv, prefix: string): string {
-  return `r2:${getR2BucketName(env)}/${prefix}`;
+function rcloneRemote(env: MoltbotEnv, prefix: string, tenantId?: string): string {
+  const base = `r2:${getR2BucketName(env)}`;
+  if (tenantId) {
+    return `${base}/${tenantId}/${prefix}`;
+  }
+  return `${base}/${prefix}`;
 }
 
 /**
@@ -35,7 +39,7 @@ async function detectConfigDir(sandbox: Sandbox): Promise<string | null> {
  * Sync OpenClaw config and workspace from container to R2 for persistence.
  * Uses rclone for direct S3 API access (no FUSE mount overhead).
  */
-export async function syncToR2(sandbox: Sandbox, env: MoltbotEnv): Promise<SyncResult> {
+export async function syncToR2(sandbox: Sandbox, env: MoltbotEnv, tenantId?: string): Promise<SyncResult> {
   if (!(await ensureRcloneConfig(sandbox, env))) {
     return { success: false, error: 'R2 storage is not configured' };
   }
@@ -49,7 +53,7 @@ export async function syncToR2(sandbox: Sandbox, env: MoltbotEnv): Promise<SyncR
     };
   }
 
-  const remote = (prefix: string) => rcloneRemote(env, prefix);
+  const remote = (prefix: string) => rcloneRemote(env, prefix, tenantId);
 
   // Sync config (rclone sync propagates deletions)
   const configResult = await sandbox.exec(

@@ -1,7 +1,8 @@
 import type { Sandbox, Process } from '@cloudflare/sandbox';
 import type { MoltbotEnv } from '../types';
+import type { TenantConfig } from '../tenant';
 import { MOLTBOT_PORT, STARTUP_TIMEOUT_MS } from '../config';
-import { buildEnvVars } from './env';
+import { buildEnvVars, buildEnvVarsFromConfig } from './env';
 import { ensureRcloneConfig } from './r2';
 
 /**
@@ -51,9 +52,10 @@ export async function findExistingMoltbotProcess(sandbox: Sandbox): Promise<Proc
  *
  * @param sandbox - The sandbox instance
  * @param env - Worker environment bindings
+ * @param tenantConfig - Per-agent config from KV (multi-tenant mode)
  * @returns The running gateway process
  */
-export async function ensureMoltbotGateway(sandbox: Sandbox, env: MoltbotEnv): Promise<Process> {
+export async function ensureMoltbotGateway(sandbox: Sandbox, env: MoltbotEnv, tenantConfig?: TenantConfig): Promise<Process> {
   // Configure rclone for R2 persistence (non-blocking if not configured).
   // The startup script uses rclone to restore data from R2 on boot.
   await ensureRcloneConfig(sandbox, env);
@@ -90,7 +92,10 @@ export async function ensureMoltbotGateway(sandbox: Sandbox, env: MoltbotEnv): P
 
   // Start a new OpenClaw gateway
   console.log('Starting new OpenClaw gateway...');
-  const envVars = buildEnvVars(env);
+  const agentName = tenantConfig?.agentAccount;
+  const envVars = tenantConfig && agentName
+    ? buildEnvVarsFromConfig(tenantConfig, env, agentName)
+    : buildEnvVars(env);
   const command = '/usr/local/bin/start-openclaw.sh';
 
   console.log('Starting process with command:', command);

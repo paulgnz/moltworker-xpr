@@ -29,11 +29,11 @@ adminApi.get('/devices', async (c) => {
 
   try {
     // Ensure moltbot is running first
-    await ensureMoltbotGateway(sandbox, c.env);
+    await ensureMoltbotGateway(sandbox, c.env, c.get('tenantConfig'));
 
     // Run OpenClaw CLI to list devices
     // Must specify --url and --token (OpenClaw v2026.2.3 requires explicit credentials with --url)
-    const token = c.env.MOLTBOT_GATEWAY_TOKEN;
+    const token = c.get('tenantConfig')?.moltbotGatewayToken || c.env.MOLTBOT_GATEWAY_TOKEN;
     const tokenArg = token ? ` --token ${token}` : '';
     const proc = await sandbox.startProcess(
       `openclaw devices list --json --url ws://localhost:18789${tokenArg}`,
@@ -86,10 +86,10 @@ adminApi.post('/devices/:requestId/approve', async (c) => {
 
   try {
     // Ensure moltbot is running first
-    await ensureMoltbotGateway(sandbox, c.env);
+    await ensureMoltbotGateway(sandbox, c.env, c.get('tenantConfig'));
 
     // Run OpenClaw CLI to approve the device
-    const token = c.env.MOLTBOT_GATEWAY_TOKEN;
+    const token = c.get('tenantConfig')?.moltbotGatewayToken || c.env.MOLTBOT_GATEWAY_TOKEN;
     const tokenArg = token ? ` --token ${token}` : '';
     const proc = await sandbox.startProcess(
       `openclaw devices approve ${requestId} --url ws://localhost:18789${tokenArg}`,
@@ -122,10 +122,10 @@ adminApi.post('/devices/approve-all', async (c) => {
 
   try {
     // Ensure moltbot is running first
-    await ensureMoltbotGateway(sandbox, c.env);
+    await ensureMoltbotGateway(sandbox, c.env, c.get('tenantConfig'));
 
     // First, get the list of pending devices
-    const token = c.env.MOLTBOT_GATEWAY_TOKEN;
+    const token = c.get('tenantConfig')?.moltbotGatewayToken || c.env.MOLTBOT_GATEWAY_TOKEN;
     const tokenArg = token ? ` --token ${token}` : '';
     const listProc = await sandbox.startProcess(
       `openclaw devices list --json --url ws://localhost:18789${tokenArg}`,
@@ -232,7 +232,7 @@ adminApi.get('/storage', async (c) => {
 adminApi.post('/storage/sync', async (c) => {
   const sandbox = c.get('sandbox');
 
-  const result = await syncToR2(sandbox, c.env);
+  const result = await syncToR2(sandbox, c.env, c.get('agentName'));
 
   if (result.success) {
     return c.json({
@@ -273,7 +273,7 @@ adminApi.post('/gateway/restart', async (c) => {
     }
 
     // Start a new gateway in the background
-    const bootPromise = ensureMoltbotGateway(sandbox, c.env).catch((err) => {
+    const bootPromise = ensureMoltbotGateway(sandbox, c.env, c.get('tenantConfig')).catch((err) => {
       console.error('Gateway restart failed:', err);
     });
     c.executionCtx.waitUntil(bootPromise);
