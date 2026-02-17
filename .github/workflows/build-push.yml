@@ -20,17 +20,12 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Install wrangler
-        run: npm install -g wrangler
+      - name: Install dependencies and build
+        run: npm ci && npm run build
 
-      - name: Build and push container image to CF registry
-        run: |
-          echo "Building container image..."
-          npx wrangler containers build \
-            --push \
-            --tag moltworker-xpr:latest \
-            .
-          echo "Image pushed to CF registry"
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+      - name: Deploy to Cloudflare (builds + pushes container image)
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CF_API_TOKEN }}
+          accountId: ${{ secrets.CF_ACCOUNT_ID }}
+          command: deploy
