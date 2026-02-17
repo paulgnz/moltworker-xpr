@@ -96,6 +96,27 @@ export async function ensureMoltbotGateway(sandbox: Sandbox, env: MoltbotEnv, te
   const envVars = tenantConfig && agentName
     ? buildEnvVarsFromConfig(tenantConfig, env, agentName)
     : buildEnvVars(env);
+
+  // In multi-tenant mode, clear any persisted gateway token from the config.
+  // R2 backups may contain a token from a previous run, and the startup script
+  // only overwrites it when OPENCLAW_GATEWAY_TOKEN is set (which we don't in multi-tenant).
+  if (tenantConfig) {
+    try {
+      await sandbox.exec(`node -e "
+        const fs = require('fs');
+        const p = '/root/.openclaw/openclaw.json';
+        try {
+          const c = JSON.parse(fs.readFileSync(p, 'utf8'));
+          if (c.gateway && c.gateway.auth) { delete c.gateway.auth.token; }
+          fs.writeFileSync(p, JSON.stringify(c, null, 2));
+          console.log('Cleared gateway token from config');
+        } catch(e) { console.log('No existing config to clear'); }
+      "`);
+    } catch {
+      console.log('[Gateway] Could not clear gateway token from config (may not exist yet)');
+    }
+  }
+
   const command = '/usr/local/bin/start-openclaw.sh';
 
   console.log('Starting process with command:', command);
