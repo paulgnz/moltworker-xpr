@@ -260,6 +260,21 @@ app.use('*', async (c, next) => {
 // middleware above, so the auth middleware reads per-tenant XPR_OWNER_ACCOUNT,
 // MOLTBOT_GATEWAY_TOKEN, etc. automatically.
 app.use('*', async (c, next) => {
+  const url = new URL(c.req.url);
+
+  // Skip auth for public routes (health checks, auth endpoints, static assets, CDP)
+  if (
+    url.pathname === '/sandbox-health' ||
+    url.pathname === '/api/status' ||
+    url.pathname.startsWith('/api/auth/') ||
+    url.pathname === '/logo.png' ||
+    url.pathname === '/logo-small.png' ||
+    url.pathname.startsWith('/_admin/assets/') ||
+    url.pathname.startsWith('/cdp')
+  ) {
+    return next();
+  }
+
   const acceptsHtml = c.req.header('Accept')?.includes('text/html');
   const middleware = createAuthMiddleware({
     type: acceptsHtml ? 'html' : 'json',
