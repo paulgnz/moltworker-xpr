@@ -178,6 +178,15 @@ app.use('*', async (c, next) => {
     c.set('agentName', agentName);
     c.set('tenantConfig', config);
 
+    // Inject tenant config into env so auth middleware, wallet.ts, and public routes
+    // can read per-tenant values (XPR_OWNER_ACCOUNT, MOLTBOT_GATEWAY_TOKEN, etc.)
+    c.env.XPR_OWNER_ACCOUNT = config.xprOwnerAccount;
+    c.env.MOLTBOT_GATEWAY_TOKEN = config.moltbotGatewayToken;
+    c.env.XPR_ACCOUNT = config.xprAccount;
+    c.env.XPR_NETWORK = config.xprNetwork;
+    c.env.XPR_RPC_ENDPOINT = config.xprRpcEndpoint;
+    if (config.anthropicApiKey) c.env.ANTHROPIC_API_KEY = config.anthropicApiKey;
+
     const options = buildSandboxOptions(c.env, config);
     const sandbox = getSandbox(c.env.Sandbox, agentName, options);
     c.set('sandbox', sandbox);
@@ -247,12 +256,10 @@ app.use('*', async (c, next) => {
 });
 
 // Middleware: Authentication for protected routes (wallet auth or CF Access)
-// In multi-tenant mode, skip — each tenant has its own gateway token for wallet auth
+// In multi-tenant mode, tenant config values are injected into c.env by the sandbox
+// middleware above, so the auth middleware reads per-tenant XPR_OWNER_ACCOUNT,
+// MOLTBOT_GATEWAY_TOKEN, etc. automatically.
 app.use('*', async (c, next) => {
-  if (isMultiTenant(c.env)) {
-    return next();
-  }
-
   const acceptsHtml = c.req.header('Accept')?.includes('text/html');
   const middleware = createAuthMiddleware({
     type: acceptsHtml ? 'html' : 'json',
