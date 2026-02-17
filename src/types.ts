@@ -49,12 +49,15 @@ export interface MoltbotEnv {
   XPR_RPC_ENDPOINT?: string; // RPC endpoint URL
   XPR_INDEXER_URL?: string; // Indexer API URL
   OPENCLAW_HOOK_TOKEN?: string; // Webhook auth token for indexer → agent communication
+  // XPR wallet auth configuration
+  XPR_OWNER_ACCOUNT?: string; // On-chain account allowed to access this gateway (wallet auth)
+  XPR_AUTH_RPC_ENDPOINT?: string; // RPC endpoint for auth tx verification (defaults to XPR_RPC_ENDPOINT)
 }
 
 /**
- * Authenticated user from Cloudflare Access
+ * Authenticated user (from Cloudflare Access or XPR wallet auth)
  */
-export interface AccessUser {
+export interface AuthUser {
   email: string;
   name?: string;
 }
@@ -66,7 +69,7 @@ export type AppEnv = {
   Bindings: MoltbotEnv;
   Variables: {
     sandbox: Sandbox;
-    accessUser?: AccessUser;
+    accessUser?: AuthUser;
   };
 };
 

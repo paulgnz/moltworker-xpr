@@ -23,14 +23,16 @@
 import { Hono } from 'hono';
 import { getSandbox, Sandbox, type SandboxOptions } from '@cloudflare/sandbox';
 
+import type { Context } from 'hono';
 import type { AppEnv, MoltbotEnv } from './types';
 import { MOLTBOT_PORT } from './config';
-import { createAccessMiddleware } from './auth';
+import { createAuthMiddleware } from './auth';
 import { ensureMoltbotGateway, findExistingMoltbotProcess } from './gateway';
 import { publicRoutes, api, adminUi, debug, cdp } from './routes';
 import { redactSensitiveParams } from './utils/logging';
 import loadingPageHtml from './assets/loading.html';
 import configErrorHtml from './assets/config-error.html';
+import walletLoginHtml from './assets/wallet-login.html';
 
 /**
  * Transform error messages from the gateway to be more user-friendly.
@@ -61,8 +63,9 @@ function validateRequiredEnv(env: MoltbotEnv): string[] {
     missing.push('MOLTBOT_GATEWAY_TOKEN');
   }
 
-  // CF Access vars not required in dev/test mode since auth is skipped
-  if (!isTestMode) {
+  // CF Access vars not required when wallet auth (XPR_OWNER_ACCOUNT) is configured,
+  // or in dev/test mode since auth is skipped entirely
+  if (!isTestMode && !env.XPR_OWNER_ACCOUNT) {
     if (!env.CF_ACCESS_TEAM_DOMAIN) {
       missing.push('CF_ACCESS_TEAM_DOMAIN');
     }
@@ -112,6 +115,30 @@ function buildSandboxOptions(env: MoltbotEnv): SandboxOptions {
 
   // Otherwise, use the specified duration
   return { sleepAfter };
+}
+
+/**
+ * Serve the wallet login page with network config injected via template replacement.
+ */
+function serveWalletLoginPage(c: Context<AppEnv>) {
+  const network = c.env.XPR_NETWORK || 'mainnet';
+  const chainId =
+    network === 'testnet'
+      ? '71ee83bcf52142d61019d95f9cc5427ba6a0d7ff8ba65d929b8a6a4461ceab80'
+      : '384da888112027f0321850a169f737c33e53b388aad48b5adace4bab97f437e0';
+
+  const rpcEndpoint = c.env.XPR_RPC_ENDPOINT ||
+    (network === 'testnet' ? 'https://testnet.protonchain.com' : 'https://proton.eosusa.io');
+  const rpcEndpoints = JSON.stringify([rpcEndpoint]);
+  const requesterAccount = c.env.XPR_ACCOUNT || 'agentcore';
+
+  const html = walletLoginHtml
+    .replace('{{CHAIN_ID}}', chainId)
+    .replace('{{RPC_ENDPOINTS}}', rpcEndpoints)
+    .replace('{{REQUESTER_ACCOUNT}}', requesterAccount)
+    .replace('{{API_MODE}}', network);
+
+  return c.html(html);
 }
 
 // Main app
@@ -195,16 +222,30 @@ app.use('*', async (c, next) => {
   return next();
 });
 
-// Middleware: Cloudflare Access authentication for protected routes
+// Middleware: Authentication for protected routes (wallet auth or CF Access)
 app.use('*', async (c, next) => {
-  // Determine response type based on Accept header
   const acceptsHtml = c.req.header('Accept')?.includes('text/html');
-  const middleware = createAccessMiddleware({
+  const middleware = createAuthMiddleware({
     type: acceptsHtml ? 'html' : 'json',
     redirectOnMissing: acceptsHtml,
   });
 
-  return middleware(c, next);
+  // Run the middleware
+  const response = await middleware(c, next);
+
+  // Intercept wallet login redirect signal — serve the login page instead
+  if (response && response.status === 401) {
+    try {
+      const body = await response.clone().json() as Record<string, unknown>;
+      if (body?._walletLoginRequired) {
+        return serveWalletLoginPage(c);
+      }
+    } catch {
+      // Not JSON — pass through
+    }
+  }
+
+  return response;
 });
 
 // Mount API routes (protected by Cloudflare Access)

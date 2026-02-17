@@ -1,2 +1,4 @@
 export { verifyAccessJWT } from './jwt';
-export { createAccessMiddleware, isDevMode, extractJWT } from './middleware';
+export { createAuthMiddleware, isDevMode, extractJWT } from './middleware';
+export { verifyWalletProof, signWalletJWT, verifyWalletJWT } from './wallet';
+export type { WalletProof, WalletJWTPayload } from './wallet';
