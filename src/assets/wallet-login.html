@@ -168,8 +168,8 @@
     </div>
 
     <script type="module">
-      // Import ProtonWebSDK from CDN
-      import ProtonWebSDK from 'https://cdn.jsdelivr.net/npm/@nicknguyen/proton-web-sdk@4.2.21/dist/es/index.js';
+      // Import ProtonWebSDK from CDN (esm.sh wraps the CJS package as ES module)
+      import ProtonWebSDK from 'https://esm.sh/@proton/web-sdk@4.4.1';
 
       // Read network config from meta tags (injected by Worker)
       const chainId = document.querySelector('meta[name="xpr-chain-id"]')?.content;
