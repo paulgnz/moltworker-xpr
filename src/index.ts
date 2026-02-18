@@ -30,7 +30,7 @@ import { createAuthMiddleware } from './auth';
 import { ensureMoltbotGateway, findExistingMoltbotProcess } from './gateway';
 import { publicRoutes, api, adminUi, debug, cdp } from './routes';
 import { redactSensitiveParams } from './utils/logging';
-import { isMultiTenant, resolveAgentFromHostname, getTenantConfig } from './tenant';
+import { isMultiTenant, resolveAgentFromHostname, getTenantConfig, mergeTenantEnv } from './tenant';
 import loadingPageHtml from './assets/loading.html';
 import configErrorHtml from './assets/config-error.html';
 import walletLoginHtml from './assets/wallet-login.html';
@@ -178,14 +178,9 @@ app.use('*', async (c, next) => {
     c.set('agentName', agentName);
     c.set('tenantConfig', config);
 
-    // Inject tenant config into env so auth middleware, wallet.ts, and public routes
-    // can read per-tenant values (XPR_OWNER_ACCOUNT, MOLTBOT_GATEWAY_TOKEN, etc.)
-    c.env.XPR_OWNER_ACCOUNT = config.xprOwnerAccount;
-    c.env.MOLTBOT_GATEWAY_TOKEN = config.moltbotGatewayToken;
-    c.env.XPR_ACCOUNT = config.xprAccount;
-    c.env.XPR_NETWORK = config.xprNetwork;
-    c.env.XPR_RPC_ENDPOINT = config.xprRpcEndpoint;
-    if (config.anthropicApiKey) c.env.ANTHROPIC_API_KEY = config.anthropicApiKey;
+    // Merge ALL tenant config fields into env so downstream code
+    // (buildEnvVars, auth middleware, rclone sync, etc.) works automatically
+    mergeTenantEnv(c.env, config);
 
     const options = buildSandboxOptions(c.env, config);
     const sandbox = getSandbox(c.env.Sandbox, agentName, options);
@@ -215,7 +210,7 @@ app.route('/cdp', cdp);
 // PROTECTED ROUTES: Cloudflare Access authentication required
 // =============================================================================
 
-// Middleware: Validate required environment variables (skip in dev mode and for debug routes)
+// Middleware: Validate required environment variables (skip in dev mode, debug routes, and tenant mode)
 app.use('*', async (c, next) => {
   const url = new URL(c.req.url);
 

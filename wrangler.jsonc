@@ -43,7 +43,7 @@
       "class_name": "Sandbox",
       "image": "registry.cloudflare.com/cc8386622ef323a160a2b0462613111d/xpr-agent-sandbox-sandbox:b51e1857",
       "instance_type": "standard-1",
-      "max_instances": 5,
+      "max_instances": 25,
     },
   ],
   "durable_objects": {

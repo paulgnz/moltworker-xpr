@@ -16,7 +16,7 @@ const LAST_SYNC_FILE = '/tmp/.last-sync';
 function rcloneRemote(env: MoltbotEnv, prefix: string, tenantId?: string): string {
   const base = `r2:${getR2BucketName(env)}`;
   if (tenantId) {
-    return `${base}/${tenantId}/${prefix}`;
+    return `${base}/tenants/${tenantId}/${prefix}`;
   }
   return `${base}/${prefix}`;
 }

@@ -14,6 +14,7 @@ import type { MoltbotEnv } from './types';
 /**
  * Per-agent configuration stored in KV.
  * Key format: `agent:{agentName}`
+ * Must match KVAgentConfig in xpr-deploy-service/src/cloudflare.ts.
  */
 export interface TenantConfig {
   agentAccount: string;
@@ -96,4 +97,33 @@ export async function getTenantConfig(
     console.error(`[tenant] Failed to parse config for ${key}`);
     return null;
   }
+}
+
+/**
+ * Merge tenant-specific KV config into the global worker environment.
+ * Overlays all tenant fields onto env so downstream code (buildEnvVars,
+ * auth middleware, rclone sync, etc.) works without per-field plumbing.
+ */
+export function mergeTenantEnv(env: MoltbotEnv, config: TenantConfig): void {
+  // AI provider
+  if (config.anthropicApiKey) env.ANTHROPIC_API_KEY = config.anthropicApiKey;
+  // XPR Network
+  env.XPR_ACCOUNT = config.xprAccount;
+  env.XPR_PRIVATE_KEY = config.xprPrivateKey;
+  env.XPR_NETWORK = config.xprNetwork;
+  env.XPR_RPC_ENDPOINT = config.xprRpcEndpoint;
+  env.XPR_OWNER_ACCOUNT = config.xprOwnerAccount;
+  if (config.xprIndexerUrl) env.XPR_INDEXER_URL = config.xprIndexerUrl;
+  // Auth tokens
+  env.OPENCLAW_HOOK_TOKEN = config.openclawHookToken;
+  env.MOLTBOT_GATEWAY_TOKEN = config.moltbotGatewayToken;
+  // Container sleep
+  if (config.sandboxSleepAfter) env.SANDBOX_SLEEP_AFTER = config.sandboxSleepAfter;
+  // Chat channels (only override if set in KV)
+  if (config.telegramBotToken) env.TELEGRAM_BOT_TOKEN = config.telegramBotToken;
+  if (config.discordBotToken) env.DISCORD_BOT_TOKEN = config.discordBotToken;
+  if (config.slackBotToken) env.SLACK_BOT_TOKEN = config.slackBotToken;
+  if (config.slackAppToken) env.SLACK_APP_TOKEN = config.slackAppToken;
+  // Tenant marker (used by R2 sync for path isolation)
+  env.TENANT_ID = config.agentAccount;
 }

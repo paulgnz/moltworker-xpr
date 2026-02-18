@@ -54,6 +54,8 @@ export interface MoltbotEnv {
   // XPR wallet auth configuration
   XPR_OWNER_ACCOUNT?: string; // On-chain account allowed to access this gateway (wallet auth)
   XPR_AUTH_RPC_ENDPOINT?: string; // RPC endpoint for auth tx verification (defaults to XPR_RPC_ENDPOINT)
+  // Multi-tenant support
+  TENANT_ID?: string; // Set by tenant middleware — used for R2 path isolation
 }
 
 /**
