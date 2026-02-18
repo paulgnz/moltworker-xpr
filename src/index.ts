@@ -147,19 +147,22 @@ function serveWalletLoginPage(c: Context<AppEnv>) {
 const app = new Hono<AppEnv>();
 
 /**
- * Cache sandbox stubs to avoid per-request getSandbox() RPC calls.
- * getSandbox() internally calls stub.setSandboxName() and stub.setKeepAlive()
- * which are RPC calls to the Durable Object, causing unnecessary load and
- * DO resets after deploys. Caching the stub per sandbox ID eliminates this.
+ * Track which sandbox IDs have been initialized (setSandboxName/setKeepAlive called).
+ * After first init, subsequent requests create stubs without passing options to avoid
+ * redundant setKeepAlive() DO storage writes. We can't cache the stub itself because
+ * CF Workers enforce I/O context isolation between requests.
  */
-const sandboxCache = new Map<string, Sandbox>();
+const initializedSandboxIds = new Set<string>();
 
-function getCachedSandbox(env: MoltbotEnv, sandboxId: string, options: SandboxOptions): Sandbox {
-  let sandbox = sandboxCache.get(sandboxId);
-  if (!sandbox) {
-    sandbox = getSandbox(env.Sandbox, sandboxId, options);
-    sandboxCache.set(sandboxId, sandbox);
+function getOrInitSandbox(env: MoltbotEnv, sandboxId: string, options: SandboxOptions): Sandbox {
+  if (initializedSandboxIds.has(sandboxId)) {
+    // Already initialized — create a lightweight stub without options
+    // This avoids redundant setSandboxName/setKeepAlive RPC calls
+    return getSandbox(env.Sandbox, sandboxId);
   }
+  // First time — full init with options (sets keepAlive, sandboxName in DO storage)
+  const sandbox = getSandbox(env.Sandbox, sandboxId, options);
+  initializedSandboxIds.add(sandboxId);
   return sandbox;
 }
 
@@ -197,12 +200,12 @@ app.use('*', async (c, next) => {
     mergeTenantEnv(c.env, config);
 
     const options = buildSandboxOptions(c.env, config);
-    const sandbox = getCachedSandbox(c.env, agentName, options);
+    const sandbox = getOrInitSandbox(c.env, agentName, options);
     c.set('sandbox', sandbox);
   } else {
     // Single-tenant mode: fixed sandbox ID (workers.dev, bare domain, or no AGENT_KV)
     const options = buildSandboxOptions(c.env);
-    const sandbox = getCachedSandbox(c.env, 'moltbot', options);
+    const sandbox = getOrInitSandbox(c.env, 'moltbot', options);
     c.set('sandbox', sandbox);
   }
 
