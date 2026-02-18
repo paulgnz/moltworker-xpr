@@ -188,8 +188,8 @@
             statusEl.textContent = 'Checking status... (poll #' + pollCount + ')';
           }
 
-          // Continue polling
-          setTimeout(checkStatus, 2000);
+          // Continue polling (5s interval — container takes 1-2 min, no need to hammer)
+          setTimeout(checkStatus, 5000);
         } catch (err) {
           consecutiveErrors++;
 
@@ -200,13 +200,13 @@
           } else {
             statusEl.textContent =
               'Retrying... (' + consecutiveErrors + '/' + maxConsecutiveErrors + ')';
-            setTimeout(checkStatus, 3000);
+            setTimeout(checkStatus, 8000);
           }
         }
       }
 
       // Start polling after a brief delay
-      setTimeout(checkStatus, 1000);
+      setTimeout(checkStatus, 2000);
     </script>
   </body>
 </html>

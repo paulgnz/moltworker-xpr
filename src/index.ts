@@ -146,6 +146,23 @@ function serveWalletLoginPage(c: Context<AppEnv>) {
 // Main app
 const app = new Hono<AppEnv>();
 
+/**
+ * Cache sandbox stubs to avoid per-request getSandbox() RPC calls.
+ * getSandbox() internally calls stub.setSandboxName() and stub.setKeepAlive()
+ * which are RPC calls to the Durable Object, causing unnecessary load and
+ * DO resets after deploys. Caching the stub per sandbox ID eliminates this.
+ */
+const sandboxCache = new Map<string, Sandbox>();
+
+function getCachedSandbox(env: MoltbotEnv, sandboxId: string, options: SandboxOptions): Sandbox {
+  let sandbox = sandboxCache.get(sandboxId);
+  if (!sandbox) {
+    sandbox = getSandbox(env.Sandbox, sandboxId, options);
+    sandboxCache.set(sandboxId, sandbox);
+  }
+  return sandbox;
+}
+
 // =============================================================================
 // MIDDLEWARE: Applied to ALL routes
 // =============================================================================
@@ -155,9 +172,6 @@ app.use('*', async (c, next) => {
   const url = new URL(c.req.url);
   const redactedSearch = redactSensitiveParams(url);
   console.log(`[REQ] ${c.req.method} ${url.pathname}${redactedSearch}`);
-  console.log(`[REQ] Has ANTHROPIC_API_KEY: ${!!c.env.ANTHROPIC_API_KEY}`);
-  console.log(`[REQ] DEV_MODE: ${c.env.DEV_MODE}`);
-  console.log(`[REQ] DEBUG_ROUTES: ${c.env.DEBUG_ROUTES}`);
   await next();
 });
 
@@ -183,12 +197,12 @@ app.use('*', async (c, next) => {
     mergeTenantEnv(c.env, config);
 
     const options = buildSandboxOptions(c.env, config);
-    const sandbox = getSandbox(c.env.Sandbox, agentName, options);
+    const sandbox = getCachedSandbox(c.env, agentName, options);
     c.set('sandbox', sandbox);
   } else {
     // Single-tenant mode: fixed sandbox ID (unchanged behavior)
     const options = buildSandboxOptions(c.env);
-    const sandbox = getSandbox(c.env.Sandbox, 'moltbot', options);
+    const sandbox = getCachedSandbox(c.env, 'moltbot', options);
     c.set('sandbox', sandbox);
   }
 

@@ -15,8 +15,10 @@ const LAST_SYNC_FILE = '/tmp/.last-sync';
 
 function rcloneRemote(env: MoltbotEnv, prefix: string, tenantId?: string): string {
   const base = `r2:${getR2BucketName(env)}`;
+  // Must match start-openclaw.sh: R2_PREFIX="${TENANT_ID:+$TENANT_ID/}"
+  // i.e., r2:moltbot-data/{tenantId}/{prefix} (no "tenants/" prefix)
   if (tenantId) {
-    return `${base}/tenants/${tenantId}/${prefix}`;
+    return `${base}/${tenantId}/${prefix}`;
   }
   return `${base}/${prefix}`;
 }

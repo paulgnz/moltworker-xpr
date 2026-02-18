@@ -5,6 +5,27 @@ import { MOLTBOT_PORT, STARTUP_TIMEOUT_MS } from '../config';
 import { buildEnvVars, buildEnvVarsFromConfig } from './env';
 import { ensureRcloneConfig } from './r2';
 
+/** Module-level dedup lock: prevents concurrent ensureMoltbotGateway calls */
+let gatewayStartupPromise: Promise<Process> | null = null;
+
+/**
+ * Check if a process command matches a gateway process (not a CLI helper).
+ */
+function isGatewayCommand(command: string): boolean {
+  const isGateway =
+    command.includes('start-openclaw.sh') ||
+    command.includes('openclaw gateway') ||
+    command.includes('start-moltbot.sh') ||
+    command.includes('clawdbot gateway');
+  const isCli =
+    command.includes('openclaw devices') ||
+    command.includes('openclaw --version') ||
+    command.includes('openclaw onboard') ||
+    command.includes('clawdbot devices') ||
+    command.includes('clawdbot --version');
+  return isGateway && !isCli;
+}
+
 /**
  * Find an existing OpenClaw gateway process
  *
@@ -15,22 +36,7 @@ export async function findExistingMoltbotProcess(sandbox: Sandbox): Promise<Proc
   try {
     const processes = await sandbox.listProcesses();
     for (const proc of processes) {
-      // Match gateway process (openclaw gateway or legacy clawdbot gateway)
-      // Don't match CLI commands like "openclaw devices list"
-      const isGatewayProcess =
-        proc.command.includes('start-openclaw.sh') ||
-        proc.command.includes('openclaw gateway') ||
-        // Legacy: match old startup script during transition
-        proc.command.includes('start-moltbot.sh') ||
-        proc.command.includes('clawdbot gateway');
-      const isCliCommand =
-        proc.command.includes('openclaw devices') ||
-        proc.command.includes('openclaw --version') ||
-        proc.command.includes('openclaw onboard') ||
-        proc.command.includes('clawdbot devices') ||
-        proc.command.includes('clawdbot --version');
-
-      if (isGatewayProcess && !isCliCommand) {
+      if (isGatewayCommand(proc.command)) {
         if (proc.status === 'starting' || proc.status === 'running') {
           return proc;
         }
@@ -43,12 +49,35 @@ export async function findExistingMoltbotProcess(sandbox: Sandbox): Promise<Proc
 }
 
 /**
- * Ensure the OpenClaw gateway is running
- *
- * This will:
- * 1. Mount R2 storage if configured
- * 2. Check for an existing gateway process
- * 3. Wait for it to be ready, or start a new one
+ * Kill ALL gateway processes (not just the first one).
+ * Prevents zombie process accumulation.
+ */
+async function killAllGatewayProcesses(sandbox: Sandbox): Promise<number> {
+  let killed = 0;
+  try {
+    const processes = await sandbox.listProcesses();
+    for (const proc of processes) {
+      if (isGatewayCommand(proc.command) && (proc.status === 'starting' || proc.status === 'running')) {
+        try {
+          await proc.kill();
+          killed++;
+        } catch (e) {
+          console.log('Failed to kill process', proc.id, ':', e);
+        }
+      }
+    }
+  } catch (e) {
+    console.log('Could not list/kill processes:', e);
+  }
+  if (killed > 0) {
+    console.log(`[Gateway] Killed ${killed} zombie gateway process(es)`);
+  }
+  return killed;
+}
+
+/**
+ * Ensure the OpenClaw gateway is running.
+ * Deduplicates concurrent calls — if a startup is already in-flight, joins it.
  *
  * @param sandbox - The sandbox instance
  * @param env - Worker environment bindings
@@ -56,8 +85,23 @@ export async function findExistingMoltbotProcess(sandbox: Sandbox): Promise<Proc
  * @returns The running gateway process
  */
 export async function ensureMoltbotGateway(sandbox: Sandbox, env: MoltbotEnv, tenantConfig?: TenantConfig): Promise<Process> {
+  // Dedup: if a startup is already in-flight, join it instead of racing
+  if (gatewayStartupPromise) {
+    console.log('[Gateway] Joining existing startup in progress...');
+    return gatewayStartupPromise;
+  }
+
+  gatewayStartupPromise = doEnsureMoltbotGateway(sandbox, env, tenantConfig)
+    .finally(() => { gatewayStartupPromise = null; });
+
+  return gatewayStartupPromise;
+}
+
+/**
+ * Internal implementation — must only be called via ensureMoltbotGateway().
+ */
+async function doEnsureMoltbotGateway(sandbox: Sandbox, env: MoltbotEnv, tenantConfig?: TenantConfig): Promise<Process> {
   // Configure rclone for R2 persistence (non-blocking if not configured).
-  // The startup script uses rclone to restore data from R2 on boot.
   await ensureRcloneConfig(sandbox, env);
 
   // Check if gateway is already running or starting
@@ -70,9 +114,6 @@ export async function ensureMoltbotGateway(sandbox: Sandbox, env: MoltbotEnv, te
       existingProcess.status,
     );
 
-    // Always use full startup timeout - a process can be "running" but not ready yet
-    // (e.g., just started by another concurrent request). Using a shorter timeout
-    // causes race conditions where we kill processes that are still initializing.
     try {
       console.log('Waiting for gateway on port', MOLTBOT_PORT, 'timeout:', STARTUP_TIMEOUT_MS);
       await existingProcess.waitForPort(MOLTBOT_PORT, { mode: 'tcp', timeout: STARTUP_TIMEOUT_MS });
@@ -80,13 +121,9 @@ export async function ensureMoltbotGateway(sandbox: Sandbox, env: MoltbotEnv, te
       return existingProcess;
       // eslint-disable-next-line no-unused-vars
     } catch (_e) {
-      // Timeout waiting for port - process is likely dead or stuck, kill and restart
-      console.log('Existing process not reachable after full timeout, killing and restarting...');
-      try {
-        await existingProcess.kill();
-      } catch (killError) {
-        console.log('Failed to kill process:', killError);
-      }
+      // Timeout — kill ALL gateway processes (not just this one) to clear zombies
+      console.log('Existing process not reachable after full timeout, killing ALL gateway processes...');
+      await killAllGatewayProcesses(sandbox);
     }
   }
 
@@ -137,8 +174,6 @@ export async function ensureMoltbotGateway(sandbox: Sandbox, env: MoltbotEnv, te
     }
   }
 
-  // Verify gateway is actually responding
   console.log('[Gateway] Verifying gateway health...');
-
   return process;
 }
