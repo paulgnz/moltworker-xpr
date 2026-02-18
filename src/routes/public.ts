@@ -80,7 +80,7 @@ publicRoutes.post('/api/gateway/restart', async (c) => {
     // Start new gateway in background
     const tc = c.get('tenantConfig');
     c.executionCtx.waitUntil(
-      ensureMoltbotGateway(sandbox, c.env, tc).catch((err: Error) => {
+      ensureMoltbotGateway(sandbox, c.env, tc, c.get('agentName') || 'moltbot').catch((err: Error) => {
         console.error('[restart] Gateway restart failed:', err);
       }),
     );

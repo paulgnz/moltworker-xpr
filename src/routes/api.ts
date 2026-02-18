@@ -29,7 +29,7 @@ adminApi.get('/devices', async (c) => {
 
   try {
     // Ensure moltbot is running first
-    await ensureMoltbotGateway(sandbox, c.env, c.get('tenantConfig'));
+    await ensureMoltbotGateway(sandbox, c.env, c.get('tenantConfig'), c.get('agentName') || 'moltbot');
 
     // Run OpenClaw CLI to list devices
     // Must specify --url and --token (OpenClaw v2026.2.3 requires explicit credentials with --url)
@@ -86,7 +86,7 @@ adminApi.post('/devices/:requestId/approve', async (c) => {
 
   try {
     // Ensure moltbot is running first
-    await ensureMoltbotGateway(sandbox, c.env, c.get('tenantConfig'));
+    await ensureMoltbotGateway(sandbox, c.env, c.get('tenantConfig'), c.get('agentName') || 'moltbot');
 
     // Run OpenClaw CLI to approve the device
     const token = c.get('tenantConfig')?.moltbotGatewayToken || c.env.MOLTBOT_GATEWAY_TOKEN;
@@ -122,7 +122,7 @@ adminApi.post('/devices/approve-all', async (c) => {
 
   try {
     // Ensure moltbot is running first
-    await ensureMoltbotGateway(sandbox, c.env, c.get('tenantConfig'));
+    await ensureMoltbotGateway(sandbox, c.env, c.get('tenantConfig'), c.get('agentName') || 'moltbot');
 
     // First, get the list of pending devices
     const token = c.get('tenantConfig')?.moltbotGatewayToken || c.env.MOLTBOT_GATEWAY_TOKEN;
@@ -273,7 +273,7 @@ adminApi.post('/gateway/restart', async (c) => {
     }
 
     // Start a new gateway in the background
-    const bootPromise = ensureMoltbotGateway(sandbox, c.env, c.get('tenantConfig')).catch((err) => {
+    const bootPromise = ensureMoltbotGateway(sandbox, c.env, c.get('tenantConfig'), c.get('agentName') || 'moltbot').catch((err) => {
       console.error('Gateway restart failed:', err);
     });
     c.executionCtx.waitUntil(bootPromise);

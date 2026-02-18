@@ -5,8 +5,9 @@ import { MOLTBOT_PORT, STARTUP_TIMEOUT_MS } from '../config';
 import { buildEnvVars, buildEnvVarsFromConfig } from './env';
 import { ensureRcloneConfig } from './r2';
 
-/** Module-level dedup lock: prevents concurrent ensureMoltbotGateway calls */
-let gatewayStartupPromise: Promise<Process> | null = null;
+/** Per-sandbox dedup locks: prevents concurrent ensureMoltbotGateway calls per tenant.
+ *  Keyed by sandbox ID (agent name or 'moltbot' for single-tenant). */
+const startupPromises = new Map<string, Promise<Process>>();
 
 /**
  * Check if a process command matches a gateway process (not a CLI helper).
@@ -77,24 +78,28 @@ async function killAllGatewayProcesses(sandbox: Sandbox): Promise<number> {
 
 /**
  * Ensure the OpenClaw gateway is running.
- * Deduplicates concurrent calls — if a startup is already in-flight, joins it.
+ * Deduplicates concurrent calls per sandbox — if a startup is already in-flight
+ * for this sandbox, joins it instead of racing.
  *
  * @param sandbox - The sandbox instance
  * @param env - Worker environment bindings
  * @param tenantConfig - Per-agent config from KV (multi-tenant mode)
+ * @param sandboxId - Unique ID for this sandbox (agent name or 'moltbot')
  * @returns The running gateway process
  */
-export async function ensureMoltbotGateway(sandbox: Sandbox, env: MoltbotEnv, tenantConfig?: TenantConfig): Promise<Process> {
-  // Dedup: if a startup is already in-flight, join it instead of racing
-  if (gatewayStartupPromise) {
-    console.log('[Gateway] Joining existing startup in progress...');
-    return gatewayStartupPromise;
+export async function ensureMoltbotGateway(sandbox: Sandbox, env: MoltbotEnv, tenantConfig?: TenantConfig, sandboxId = 'moltbot'): Promise<Process> {
+  // Dedup: if a startup is already in-flight for this sandbox, join it
+  const existing = startupPromises.get(sandboxId);
+  if (existing) {
+    console.log(`[Gateway] Joining existing startup for '${sandboxId}'...`);
+    return existing;
   }
 
-  gatewayStartupPromise = doEnsureMoltbotGateway(sandbox, env, tenantConfig)
-    .finally(() => { gatewayStartupPromise = null; });
+  const promise = doEnsureMoltbotGateway(sandbox, env, tenantConfig)
+    .finally(() => { startupPromises.delete(sandboxId); });
 
-  return gatewayStartupPromise;
+  startupPromises.set(sandboxId, promise);
+  return promise;
 }
 
 /**

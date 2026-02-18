@@ -242,7 +242,7 @@ app.use('*', async (c, next) => {
     const tc = tenantConfig;
     console.log(`[PREWARM] Starting gateway pre-warm for sandbox '${sandboxId}'`);
     c.executionCtx.waitUntil(
-      ensureMoltbotGateway(sandbox, env, tc).catch((err: Error) => {
+      ensureMoltbotGateway(sandbox, env, tc, sandboxId).catch((err: Error) => {
         console.log(`[PREWARM] Gateway pre-warm failed for '${sandboxId}':`, err.message);
         // Clear flag so next request retries
         prewarmStarted.delete(sandboxId);
@@ -393,7 +393,7 @@ app.all('*', async (c) => {
     // Start the gateway in the background (don't await)
     const tc = c.get('tenantConfig');
     c.executionCtx.waitUntil(
-      ensureMoltbotGateway(sandbox, c.env, tc).catch((err: Error) => {
+      ensureMoltbotGateway(sandbox, c.env, tc, c.get('agentName') || 'moltbot').catch((err: Error) => {
         console.error('[PROXY] Background gateway start failed:', err);
       }),
     );
@@ -404,7 +404,7 @@ app.all('*', async (c) => {
 
   // Ensure moltbot is running (this will wait for startup)
   try {
-    await ensureMoltbotGateway(sandbox, c.env, c.get('tenantConfig'));
+    await ensureMoltbotGateway(sandbox, c.env, c.get('tenantConfig'), c.get('agentName') || 'moltbot');
   } catch (error) {
     console.error('[PROXY] Failed to start Moltbot:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -439,13 +439,15 @@ app.all('*', async (c) => {
     // The container's gateway requires a token for --bind lan (OpenClaw v2026.1.29+).
     // Inject the gateway token server-side for both single-tenant and multi-tenant.
     // In single-tenant mode, the token comes from Worker secrets.
-    // In multi-tenant mode, it comes from KV config (merged into c.env by tenant middleware).
+    // In multi-tenant mode, it comes from KV config (stored in context by tenant middleware).
     //
-    // We inject via BOTH query param AND Authorization header because wsConnect()
-    // may strip query params when proxying to the container port.
+    // ALWAYS override the client's token with the server's trusted value — the client
+    // may send a stale or empty token. We inject via BOTH query param AND Authorization
+    // header because wsConnect() may strip query params when proxying to the container.
     let wsRequest = request;
-    const gatewayToken = c.env.MOLTBOT_GATEWAY_TOKEN;
-    if (gatewayToken && !url.searchParams.has('token')) {
+    const tenantCfg = c.get('tenantConfig');
+    const gatewayToken = tenantCfg?.moltbotGatewayToken || c.env.MOLTBOT_GATEWAY_TOKEN;
+    if (gatewayToken) {
       const tokenUrl = new URL(url.toString());
       tokenUrl.searchParams.set('token', gatewayToken);
       const headers = new Headers(request.headers);
