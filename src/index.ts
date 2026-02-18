@@ -177,14 +177,14 @@ app.use('*', async (c, next) => {
 
 // Middleware: Resolve tenant and initialize sandbox
 app.use('*', async (c, next) => {
-  if (isMultiTenant(c.env)) {
-    // Multi-tenant mode: sandbox ID from hostname subdomain
-    const agentName = resolveAgentFromHostname(c.req.header('host') || '');
-    if (!agentName) {
-      return c.json({ error: 'Could not resolve agent from hostname' }, 400);
-    }
+  // Try multi-tenant resolution if AGENT_KV is bound and hostname has a valid agent subdomain.
+  // Falls through to single-tenant if no subdomain or agent not found in KV.
+  const agentName = isMultiTenant(c.env)
+    ? resolveAgentFromHostname(c.req.header('host') || '')
+    : null;
 
-    const config = await getTenantConfig(c.env.AGENT_KV!, agentName);
+  if (agentName && c.env.AGENT_KV) {
+    const config = await getTenantConfig(c.env.AGENT_KV, agentName);
     if (!config) {
       return c.json({ error: `Agent '${agentName}' not found` }, 404);
     }
@@ -200,7 +200,7 @@ app.use('*', async (c, next) => {
     const sandbox = getCachedSandbox(c.env, agentName, options);
     c.set('sandbox', sandbox);
   } else {
-    // Single-tenant mode: fixed sandbox ID (unchanged behavior)
+    // Single-tenant mode: fixed sandbox ID (workers.dev, bare domain, or no AGENT_KV)
     const options = buildSandboxOptions(c.env);
     const sandbox = getCachedSandbox(c.env, 'moltbot', options);
     c.set('sandbox', sandbox);
@@ -233,8 +233,8 @@ app.use('*', async (c, next) => {
     return next();
   }
 
-  // Skip validation in dev mode or multi-tenant mode (config comes from KV)
-  if (c.env.DEV_MODE === 'true' || isMultiTenant(c.env)) {
+  // Skip validation in dev mode or when tenant config is loaded from KV
+  if (c.env.DEV_MODE === 'true' || c.get('tenantConfig')) {
     return next();
   }
 
@@ -399,7 +399,8 @@ app.all('*', async (c) => {
     // In single-tenant mode, inject the gateway token via query param.
     // CF Access redirects strip query params, so we re-inject server-side.
     let wsRequest = request;
-    if (!isMultiTenant(c.env)) {
+    if (!c.get('tenantConfig')) {
+      // Single-tenant: inject the gateway token via query param
       const gatewayToken = c.env.MOLTBOT_GATEWAY_TOKEN;
       if (gatewayToken && !url.searchParams.has('token')) {
         const tokenUrl = new URL(url.toString());
