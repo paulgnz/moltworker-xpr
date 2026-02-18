@@ -440,13 +440,23 @@ app.all('*', async (c) => {
     // Inject the gateway token server-side for both single-tenant and multi-tenant.
     // In single-tenant mode, the token comes from Worker secrets.
     // In multi-tenant mode, it comes from KV config (merged into c.env by tenant middleware).
+    //
+    // We inject via BOTH query param AND Authorization header because wsConnect()
+    // may strip query params when proxying to the container port.
     let wsRequest = request;
     const gatewayToken = c.env.MOLTBOT_GATEWAY_TOKEN;
     if (gatewayToken && !url.searchParams.has('token')) {
       const tokenUrl = new URL(url.toString());
       tokenUrl.searchParams.set('token', gatewayToken);
-      wsRequest = new Request(tokenUrl.toString(), request);
-      console.log('[WS] Gateway token injected server-side');
+      const headers = new Headers(request.headers);
+      headers.set('Authorization', `Bearer ${gatewayToken}`);
+      wsRequest = new Request(tokenUrl.toString(), {
+        method: request.method,
+        headers,
+        // @ts-expect-error - CF Workers WebSocket upgrade needs original request properties
+        cf: (request as any).cf,
+      });
+      console.log('[WS] Gateway token injected (query + header)');
     }
 
     // Get WebSocket connection to the container
