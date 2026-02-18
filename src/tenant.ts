@@ -68,10 +68,15 @@ export function resolveAgentFromHostname(hostname: string): string | null {
   // Need at least 3 parts: agent.domain.tld
   if (parts.length < 3) return null;
 
-  const agentName = parts[0];
+  const subdomain = parts[0];
 
   // Skip reserved/infrastructure subdomains
-  if (RESERVED_SUBDOMAINS.has(agentName)) return null;
+  if (RESERVED_SUBDOMAINS.has(subdomain)) return null;
+
+  // EOSIO names use dots (a-z, 1-5, .) but dots can't appear in subdomains,
+  // so the deploy service replaces dots with hyphens in URLs.
+  // Since EOSIO names never contain hyphens, this conversion is unambiguous.
+  const agentName = subdomain.includes('-') ? subdomain.replace(/-/g, '.') : subdomain;
 
   // Sanity check: must be a valid EOSIO name (1-12 chars, a-z.1-5)
   if (!/^[a-z1-5.]{1,12}$/.test(agentName)) return null;
