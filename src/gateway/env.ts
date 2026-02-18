@@ -106,10 +106,7 @@ export function buildEnvVarsFromConfig(
     envVars.ANTHROPIC_API_KEY = env.AI_GATEWAY_API_KEY;
   }
 
-  // OpenClaw v2026.1.29+ requires a token when binding to LAN (--bind lan).
-  // Even though the Worker's wallet auth middleware protects the public-facing endpoint,
-  // the container gateway still needs a token to start. The Worker injects this token
-  // server-side when proxying WebSocket connections to the container.
+  // Pass gateway token to container — OpenClaw requires it for --bind lan mode
   if (config.moltbotGatewayToken) {
     envVars.OPENCLAW_GATEWAY_TOKEN = config.moltbotGatewayToken;
   }

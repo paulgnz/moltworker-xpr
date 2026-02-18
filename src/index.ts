@@ -436,34 +436,25 @@ app.all('*', async (c) => {
       console.log('[WS] URL:', url.pathname + redactedSearch);
     }
 
-    // The container's gateway requires a token for --bind lan (OpenClaw v2026.1.29+).
-    // Inject the gateway token server-side for both single-tenant and multi-tenant.
-    // In single-tenant mode, the token comes from Worker secrets.
-    // In multi-tenant mode, it comes from KV config (stored in context by tenant middleware).
-    //
-    // ALWAYS override the client's token with the server's trusted value — the client
-    // may send a stale or empty token. We inject via BOTH query param AND Authorization
-    // header because wsConnect() may strip query params when proxying to the container.
-    let wsRequest = request;
+    // Use containerFetch() instead of wsConnect() for the WebSocket upgrade.
+    // containerFetch() does a proper HTTP request that preserves headers (including
+    // Authorization), while wsConnect() creates a raw WebSocket that strips headers.
+    // This allows the gateway token to reach OpenClaw inside the container.
     const tenantCfg = c.get('tenantConfig');
     const gatewayToken = tenantCfg?.moltbotGatewayToken || c.env.MOLTBOT_GATEWAY_TOKEN;
+
+    const headers = new Headers(request.headers);
     if (gatewayToken) {
-      const tokenUrl = new URL(url.toString());
-      tokenUrl.searchParams.set('token', gatewayToken);
-      const headers = new Headers(request.headers);
       headers.set('Authorization', `Bearer ${gatewayToken}`);
-      wsRequest = new Request(tokenUrl.toString(), {
-        method: request.method,
-        headers,
-        // @ts-expect-error - CF Workers WebSocket upgrade needs original request properties
-        cf: (request as any).cf,
-      });
-      console.log('[WS] Gateway token injected (query + header)');
     }
 
-    // Get WebSocket connection to the container
-    const containerResponse = await sandbox.wsConnect(wsRequest, MOLTBOT_PORT);
-    console.log('[WS] wsConnect response status:', containerResponse.status);
+    // containerFetch(request, port) forwards the full HTTP request to the container port,
+    // including WebSocket upgrade headers and Authorization.
+    const containerResponse = await (sandbox as any).containerFetch(
+      new Request(request.url, { method: request.method, headers }),
+      MOLTBOT_PORT,
+    );
+    console.log('[WS] containerFetch response status:', containerResponse.status);
 
     // Get the container-side WebSocket
     const containerWs = containerResponse.webSocket;
