@@ -106,10 +106,13 @@ export function buildEnvVarsFromConfig(
     envVars.ANTHROPIC_API_KEY = env.AI_GATEWAY_API_KEY;
   }
 
-  // In multi-tenant mode, the Worker's wallet auth middleware handles authentication.
-  // The container is not internet-accessible, so container-level token auth is unnecessary.
-  // Don't set OPENCLAW_GATEWAY_TOKEN — the gateway starts without --token flag,
-  // and with --allow-unconfigured it accepts unauthenticated WebSocket connections.
+  // OpenClaw v2026.1.29+ requires a token when binding to LAN (--bind lan).
+  // Even though the Worker's wallet auth middleware protects the public-facing endpoint,
+  // the container gateway still needs a token to start. The Worker injects this token
+  // server-side when proxying WebSocket connections to the container.
+  if (config.moltbotGatewayToken) {
+    envVars.OPENCLAW_GATEWAY_TOKEN = config.moltbotGatewayToken;
+  }
   // OPENCLAW_DEV_MODE enables allowInsecureAuth for the Control UI.
   envVars.OPENCLAW_DEV_MODE = 'true';
 

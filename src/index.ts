@@ -166,6 +166,21 @@ function getOrInitSandbox(env: MoltbotEnv, sandboxId: string, options: SandboxOp
   return sandbox;
 }
 
+/**
+ * Track which sandboxes have had gateway pre-warming triggered.
+ * This ensures we start the gateway in the background on the FIRST request,
+ * even before auth completes. Critical for multi-tenant agents where the user
+ * must go through wallet login before the catch-all handler runs.
+ *
+ * Without this, the gateway never starts because:
+ * 1. Unauthenticated request → auth middleware → wallet login page (200)
+ * 2. Catch-all handler (which calls ensureMoltbotGateway) never executes
+ * 3. User authenticates → reloads → catch-all runs → 1-2 min cold start
+ *
+ * With prewarm, the gateway starts booting during the wallet login flow.
+ */
+const prewarmStarted = new Set<string>();
+
 // =============================================================================
 // MIDDLEWARE: Applied to ALL routes
 // =============================================================================
@@ -186,6 +201,9 @@ app.use('*', async (c, next) => {
     ? resolveAgentFromHostname(c.req.header('host') || '')
     : null;
 
+  let sandboxId: string;
+  let tenantConfig: import('./tenant').TenantConfig | undefined;
+
   if (agentName && c.env.AGENT_KV) {
     const config = await getTenantConfig(c.env.AGENT_KV, agentName);
     if (!config) {
@@ -194,6 +212,7 @@ app.use('*', async (c, next) => {
 
     c.set('agentName', agentName);
     c.set('tenantConfig', config);
+    tenantConfig = config;
 
     // Merge ALL tenant config fields into env so downstream code
     // (buildEnvVars, auth middleware, rclone sync, etc.) works automatically
@@ -202,11 +221,33 @@ app.use('*', async (c, next) => {
     const options = buildSandboxOptions(c.env, config);
     const sandbox = getOrInitSandbox(c.env, agentName, options);
     c.set('sandbox', sandbox);
+    sandboxId = agentName;
   } else {
     // Single-tenant mode: fixed sandbox ID (workers.dev, bare domain, or no AGENT_KV)
     const options = buildSandboxOptions(c.env);
     const sandbox = getOrInitSandbox(c.env, 'moltbot', options);
     c.set('sandbox', sandbox);
+    sandboxId = 'moltbot';
+  }
+
+  // Pre-warm the gateway in the background on first request per sandbox.
+  // This is critical for multi-tenant agents: the auth middleware blocks
+  // unauthenticated users (showing wallet login), so the catch-all handler
+  // (which normally starts the gateway) never runs until after auth completes.
+  // By pre-warming here, the gateway starts booting during the login flow.
+  if (!prewarmStarted.has(sandboxId)) {
+    prewarmStarted.add(sandboxId);
+    const sandbox = c.get('sandbox');
+    const env = c.env;
+    const tc = tenantConfig;
+    console.log(`[PREWARM] Starting gateway pre-warm for sandbox '${sandboxId}'`);
+    c.executionCtx.waitUntil(
+      ensureMoltbotGateway(sandbox, env, tc).catch((err: Error) => {
+        console.log(`[PREWARM] Gateway pre-warm failed for '${sandboxId}':`, err.message);
+        // Clear flag so next request retries
+        prewarmStarted.delete(sandboxId);
+      }),
+    );
   }
 
   await next();
@@ -395,24 +436,17 @@ app.all('*', async (c) => {
       console.log('[WS] URL:', url.pathname + redactedSearch);
     }
 
-    // In multi-tenant mode, the Worker's wallet auth handles authentication.
-    // The container's gateway runs without token auth (--allow-unconfigured),
-    // so no token injection needed. wsConnect doesn't forward query params anyway.
-    //
-    // In single-tenant mode, inject the gateway token via query param.
-    // CF Access redirects strip query params, so we re-inject server-side.
+    // The container's gateway requires a token for --bind lan (OpenClaw v2026.1.29+).
+    // Inject the gateway token server-side for both single-tenant and multi-tenant.
+    // In single-tenant mode, the token comes from Worker secrets.
+    // In multi-tenant mode, it comes from KV config (merged into c.env by tenant middleware).
     let wsRequest = request;
-    if (!c.get('tenantConfig')) {
-      // Single-tenant: inject the gateway token via query param
-      const gatewayToken = c.env.MOLTBOT_GATEWAY_TOKEN;
-      if (gatewayToken && !url.searchParams.has('token')) {
-        const tokenUrl = new URL(url.toString());
-        tokenUrl.searchParams.set('token', gatewayToken);
-        wsRequest = new Request(tokenUrl.toString(), request);
-        console.log('[WS] Token injected (single-tenant mode)');
-      }
-    } else {
-      console.log('[WS] Multi-tenant mode — no container token needed');
+    const gatewayToken = c.env.MOLTBOT_GATEWAY_TOKEN;
+    if (gatewayToken && !url.searchParams.has('token')) {
+      const tokenUrl = new URL(url.toString());
+      tokenUrl.searchParams.set('token', gatewayToken);
+      wsRequest = new Request(tokenUrl.toString(), request);
+      console.log('[WS] Gateway token injected server-side');
     }
 
     // Get WebSocket connection to the container
