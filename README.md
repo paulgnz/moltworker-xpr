@@ -439,17 +439,64 @@ The previous `AI_GATEWAY_API_KEY` + `AI_GATEWAY_BASE_URL` approach is still supp
 | `CDP_SECRET` | No | Shared secret for CDP endpoint authentication (see [Browser Automation](#optional-browser-automation-cdp)) |
 | `WORKER_URL` | No | Public URL of the worker (required for CDP) |
 
+## Multi-Tenant Mode (XPR Agents)
+
+This fork supports multi-tenant deployment where a single Worker serves multiple XPR agents, each with their own container and configuration stored in Cloudflare KV.
+
+### How It Works
+
+1. **Tenant resolution** — Subdomain extracted from hostname (e.g., `alice.xpragents.com` → `alice`)
+2. **KV lookup** — `AGENT_KV.get("agent:alice")` returns per-agent config (API keys, XPR account, tokens)
+3. **Env merge** — Tenant config overlaid onto global Worker secrets
+4. **Sandbox isolation** — Each tenant gets a separate Durable Object + container instance
+5. **Wallet auth** — XPR wallet-based auth (signs transfer, backend verifies, JWT cookie issued)
+
+### Configuration
+
+Multi-tenant requires the `AGENT_KV` KV namespace binding in `wrangler.jsonc` (already configured).
+
+Per-agent config is written to KV by the [deploy service](https://github.com/paulgnz/xpr-deploy-service) during provisioning. The KV value is a JSON object:
+
+```json
+{
+  "xprAccount": "myagent",
+  "xprPrivateKey": "PVT_K1_...",
+  "anthropicApiKey": "sk-ant-...",
+  "moltbotGatewayToken": "...",
+  "xprOwnerAccount": "owner",
+  "xprNetwork": "mainnet",
+  "xprRpcEndpoint": "https://rpc.api.mainnet.metalx.com"
+}
+```
+
+### Key Behaviors
+
+- **Prewarm** — Container starts in sandbox middleware (before auth) via `waitUntil()`, so it boots during the wallet login flow
+- **Single-tenant fallback** — Requests without a recognized tenant subdomain use the original `'moltbot'` Durable Object + Worker secrets
+- **R2 isolation** — Each tenant's data is prefixed: `{agentName}/openclaw/`
+- **Gateway token** — Injected server-side into WebSocket URLs; users never see it
+
+### Operational Notes
+
+- **Always build before deploy:** `npm run build && npx wrangler deploy`
+- **View live logs:** `npx wrangler tail`
+- **Check KV:** `npx wrangler kv key get --remote --namespace-id <id> "agent:<name>"`
+- **Cold start:** ~90 seconds for OpenClaw gateway to become ready
+- **`max_instances`:** Set to 25 in `wrangler.jsonc` for concurrent tenant containers
+
 ## Security Considerations
 
 ### Authentication Layers
 
 OpenClaw in Cloudflare Sandbox uses multiple authentication layers:
 
-1. **Cloudflare Access** - Protects admin routes (`/_admin/`, `/api/*`, `/debug/*`). Only authenticated users can manage devices.
+1. **Cloudflare Access** (single-tenant) — Protects admin routes (`/_admin/`, `/api/*`, `/debug/*`). Only authenticated users can manage devices.
 
-2. **Gateway Token** - Required to access the Control UI. Pass via `?token=` query parameter. Keep this secret.
+2. **XPR Wallet Auth** (multi-tenant) — Owner signs a small XPR transfer, Worker pushes tx to chain to verify signature, issues JWT cookie (24h). No CF Access required.
 
-3. **Device Pairing** - Each device (browser, CLI, chat platform DM) must be explicitly approved via the admin UI before it can interact with the assistant. This is the default "pairing" DM policy.
+3. **Gateway Token** — Required to access the Control UI. Pass via `?token=` query parameter. Keep this secret. In multi-tenant mode, injected server-side.
+
+4. **Device Pairing** — Each device (browser, CLI, chat platform DM) must be explicitly approved via the admin UI before it can interact with the assistant. This is the default "pairing" DM policy.
 
 ## Troubleshooting
 
